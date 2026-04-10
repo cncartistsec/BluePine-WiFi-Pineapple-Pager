@@ -1,1 +1,922 @@
-placeholder
+#!/bin/bash
+# Title: BluePine
+# Author: cncartist
+# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range and inability to change the built in MAC.
+# Category: csec/recon
+# Version: 1.0
+# 
+# ============================================
+# Acknowledgements: 
+# ============================================
+# Find Hackers - Author: NULLFaceNoCase - (idea and concept for searching BT devices)
+# Incident Response Forensic Collector - Author: curtthecoder - (logging example)
+# Zombie UFO Theme - Author: Zombie Joe - (theme support & testing)
+# toggle_ab_leds - https://github.com/jader242 - (stealth mode inspiration)
+# https://www.rapidtables.com/code/text/ascii-table.html - (acsii verification for logo)
+# https://github.com/judcrandall/lookout.py/tree/main - (Axon OUI)
+# Fuzz_Finder - Author: OSINTI4L - (Axon OUIs)
+# https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE/tree/main - (CC Skimmer Data)
+# https://github.com/colonelpanichacks/flock-you/tree/main - (Flock OUIs + Names)
+# 
+# ============================================
+# Includes: 
+# ============================================
+#  -- Bluetooth Device Hunter (Classic + LE combined or separate).
+#  -- -- -- Hunt via Scanning All, Single MAC, OUI prefix, and/or Name.
+#  -- -- -- RSSI meter for each found signal, best signal showing at the bottom of the screen.
+#  -- -- -- Custom configuration allowed and data builds over time in case name or manufacturer is missed on first scans.
+#  -- -- -- Verbose logging / debugging available.
+#  -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / USB Kill / WiFi Pineapple BT Scanner.
+#  -- -- -- Scan the airwaves, save targets, or scan your already saved target list from Device Hunter scans.
+#  -- Target Probing:
+#  -- -- -- Required to set a Target before accessing the Probe menu.
+#  -- -- -- Set Target MAC, Hunt Target, Browse Services, Get Target Info, Get Target Vendor, Verify Target Connection.
+#  -- -- -- All probe actions are passive with the exception of Verify Connection which will test connection but not send data/commands.
+#  -- -- -- No activity/probing will happen on the target MAC until confirmed by the user flow.
+#  -- -- -- When testing, it's normal for a secure device not accepting general connection/pairing requests to not respond to any of the Probing features.
+#  -- -- -- In this suite, Get Target Vendor would be the only valid tool to lookup data related to a device MAC that's secured.
+#  -- -- -- Custom OUI input needs to be a full MAC to pass the mac validator.
+#  -- -- -- The last 3 octets will be removed keeping only the Custom OUI when entered.
+#  -- Bluetooth Discoverable Setting Changer + Bluetooth Hardware Name Changer.
+#  -- -- -- Can change both USB + Internal Settings.
+#  -- Bluetooth MAC Address Changer for USB CSR8510 / CSR v4.0 Bluetooth Adapter.
+#  -- -- -- Tool will act on hci1 by default and has been tested to work on various CSR8510 Bluetooth Adapters (range from $5-10).  Can also permanently change Alias/Name for specific MAC as an option, or restore the old name before change.  Boot the pager first before plugging in USB BT Adapter to ensure it gets hci1 instead of hci0.
+#  -- Last Target and Saved Targets list management.
+#  -- -- -- Saved Targets list can be built over time, recommended to keep under a certain number and a warning will show when loading the payload with saved targets greater than the warn number.
+#  -- -- -- You'll experience performance impacts loading the payload, viewing, or scanning Targets if the list is over the warn number.  It's been tested to over 6000 random MACs + Names without any crashes but takes minutes to load the list for display.
+#  -- -- -- When adding Scan Targets to the Saved Target List, it will only report a new addition if the mac did not exist in the list prior.
+#  -- -- -- All Scanned MACs/Names are stored in "Targets List", these are cleared automatically & lost when the payload is closed.
+#  -- -- -- Saved MACs/Names that persist across app openings are stored in "Saved Targets List".
+#  -- -- -- You can add Scanned Targets to the "Saved Targets List" directly after a scan, or in the "Manage Saved Targets" menu option.
+#  -- Save / Load Saved Target List from file
+#  -- -- -- Saved Target List can be named for archiving, alphanumerical characters only.
+#  -- Configuration saving / tracking number of scans and malicious items found over time.
+#  -- Privacy / Streamer Mode:
+#  -- -- -- (obscures MAC + Targets/Device Names) allows full functionality while obscuring ALL identifying information on screen, for both targets and self.
+#  -- Friendly Mode:
+#  -- -- -- Changes verbiage based on status, "target" -> "device", "hunt" -> "find"
+#  -- Stealth Mode:
+#  -- -- -- Sound Effects, LEDS, Payload LED Actions Disabled
+#  -- Debug Mode:
+#  -- -- -- A notification will show before each scan with debug enabled and extra log files saved for that process.
+#  -- -- -- Saves full data stream for each Bluetooth scan at multiple points.  Please be aware these files can add up over time and it's best to clear them out or turn off debugging mode if not actively using them for debugging.
+#  -- Dependencies / Ringtones:
+#  -- -- -- evtest and GNU Grep are required dependencies, will install automatically if confirmed
+#  -- -- -- Will check for ringtones at start and copy if confirmed
+# 
+# ============================================
+# Notes:
+# ============================================
+#  -- Device Hunter Scan: 
+#  -- -- -- Long Press or Tap OK on Pager to pause/stop scanning (not tested with virtual pager buttons yet)
+#  -- -- -- -- - Required when infinite scan is enabled (default)
+#  -- -- -- -- - The pause/stop action is recorded but cannot be paused/stopped while BT scanning.
+#  -- -- -- -- - It may take a couple seconds to process the pause/stop command.
+#  -- -- -- -- - If you do not stop/finish the scan, targets are not saved and you are only viewing the scan details on the screen.
+#  -- -- -- Before each Scan, you can choose default/unchanged Scan settings, or Modify Scan settings.
+#  -- -- -- -- - Pre-Scan Modify allows changing Scan duration and Scanning Classic + LE combined or separate.
+#  -- -- -- -- - You would only choose one type if you knew which one has the BT device(s) you're searching for.
+#  -- -- -- If locating a specific item, sometimes it's best to get multiple scans in close proximity to confirm the strength is accurate.
+#  -- -- -- -- - It may pause instantly to as little as a few seconds, or the total time of "scanning/BLUE LED blinking" to pause/stop.
+#  -- -- -- -- - This is to prevent stopping the actual bluetooth scans.
+#  -- -- -- -- - Check for pause/stop is only done at certain points in the scanning process.
+#  -- -- -- -- - You are able to pause, then continue scanning, or stop and add targets and/or return to main menu.
+#  -- -- -- -- - Targets are not permanently saved until confirming to save them to Saved Targets.
+#  -- -- -- -- - Best time to press pause/stop is after the final processing step/RED LED solid, before results are shown/MAGENTA LED solid.
+#  -- -- -- The best way to get used to the sensitivity is to scan for known devices and locate them within close range to see the sensitivity received.
+#  -- -- -- There are many factors in Bluetooth sensitivity; walls & windows bounce or weaken signal, desks/objects can weaken signal, orientation of the pager can matter, and signals can look weak until you get closer to the actual source/Bluetooth chip on the target device. 
+#  -- -- -- Using an external USB CSR8510 / CSR v4.0 Bluetooth Adapter, you can achieve better sensitivity and range.
+#  -- Bluetooth: 
+#  -- -- -- If you boot up the pager with USB bluetooth plugged in, it may reverse the hci addressing.
+#  -- -- -- -- - Please boot the pager WITHOUT a USB device connected for hci0 to be addressed as the first default device.
+#  -- -- -- How to verify your USB CSR8510 / CSR v4.0 Bluetooth Adapter is GENUINE
+#  -- -- -- -- - Run: hciconfig hci1 -a
+#  -- -- -- -- - Verify line output of -> HCI Version + LMP Version + Manufacturer
+#  -- -- -- -- - Both GENUINE + FAKE/BAD Versions: # Manufacturer: Cambridge Silicon Radio (10)
+#  -- -- -- -- - GENUINE: # HCI Version: 4.0 (0x6)  Revision: 0x22bb
+#  -- -- -- -- - GENUINE: # LMP Version: 4.0 (0x6)  Subversion: 0x22bb
+#  -- -- -- -- - FAKE/BAD: # HCI Version:  (0xe)  Revision: 0x201
+#  -- -- -- -- - FAKE/BAD: # LMP Version:  (0xe)  Subversion: 0x201
+#  -- -- -- -- - If you have no "Version: 4.0" in your details, the adapter will not work efficiently and is not a genuine CSR v4.0.
+#  -- Debug / Logging:
+#  -- -- -- With debug enabled, log files will add up quickly over time in filesize.
+#  -- -- -- -- - Please take care to only debug when needed; it keeps full BT scan LOG files which take significant space.
+#  -- Menu Display / Smaller Font Size for List Picker:
+#  -- -- -- changed text_size to small and max_chars to 38/40
+#  -- -- -- "text_size": "small"  &  "max_chars": 38  &  "max_chars": 40
+#  -- -- -- updated theme in /mmc/root/themes/THEME/components/templates
+#  -- -- -- -- - option_dialog_string.json  ( "max_chars": 38 )
+#  -- -- -- -- - option_dialog_string_selected.json  ( "max_chars": 40 )
+# 
+# ============================================
+#             SCAN LED STATUS
+# ============================================
+#             ------ start ------
+# GREEN:            Configuration
+# MAGENTA:          IDLE
+#             ------ scanning ------
+# WHITE:            Resetting adapter
+# BLUE SLOW blink:  Scanning Bluetooth Classic
+# CYAN SLOW blink:  Scanning Bluetooth LE
+# WHITE:            Finished scans
+# BLUE:             Cleanup / pre-processing
+# GREEN:            Build result file for processing
+# YELLOW:           String manipulation of result file
+# RED:              Final looping results for display
+# MAGENTA:          Finished processing
+#             ------ scanning ------
+# ============================================
+#             RINGTONEs used
+# ============================================
+# flutter       PAYLOAD LOADED
+# glitchHack    SCAN READY
+# Achievement   SCAN FOUND ITEMS
+# sideBeam      SCAN FOUND NONE
+# warning       DETECT FOUND ITEMS
+# ScaleTrill    DETECT FOUND NONE
+# ============================================
+#          Future improvements
+# ============================================
+# gps data tagging for scans?
+# text switch for how many targets found in session or detected
+# build log viewer in?
+# change actual sound setting for system/alerts?
+# implement sql lite db instead of current method?
+# ============================================
+# 
+# Include the function files   # or #        . "./file1.sh"
+source "./include/funcs_main.sh"
+source "./include/funcs_menu.sh"
+source "./include/funcs_scan.sh"
+
+# ---- CONFIG ----
+LOOT_BASE="/root/loot/csec/"; LOOT_DIR="${LOOT_BASE}bt-bluepine"
+LOOT_SCAN="${LOOT_DIR}/scan"; LOOT_DETECT="${LOOT_DIR}/detect"; LOOT_PROBE="${LOOT_DIR}/probe"; LOOT_TARGETS="${LOOT_DIR}/targets"
+mkdir -p "$LOOT_DIR"; mkdir -p "$LOOT_SCAN"; mkdir -p "$LOOT_DETECT"; mkdir -p "$LOOT_PROBE"; mkdir -p "$LOOT_TARGETS"
+TIMESTAMP=$(date +"%Y-%m-%d_%H%M%S")
+REPORT_FILE="$LOOT_SCAN/Report_${TIMESTAMP}.txt"
+REPORT_DETECT_FILE="$LOOT_DETECT/Report_${TIMESTAMP}.txt"
+REPORT_PROBE_FILE="$LOOT_PROBE/Report_${TIMESTAMP}.txt"
+DATASTREAMBT_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBT.txt"
+DATASTREAMBT2_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBT2.txt"
+DATASTREAMBT3_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBT3.txt"
+DATASTREAMBTTMP_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBTTMP.txt"
+DATASTREAMBTLE_FILE="$LOOT_DETECT/DataBTLE_${TIMESTAMP}.txt"
+DATASTREAMBTLETMP_FILE="$LOOT_DETECT/DataBTLETMP_${TIMESTAMP}.txt"
+KEYCKTMP_FILE="$LOOT_DIR/KeyCKTMP.txt"
+TARGETMAC_FILE="$LOOT_TARGETS/LastTarget.txt"
+SAVEDTARGETS_FILE="$LOOT_TARGETS/SavedTargets.txt"
+
+# ---- DEFAULTS ----
+scan_default="false"
+scan_targeted="false"
+scan_custom=0
+target_mac=""
+enable_CSR_func=0
+saved_target_select=0
+saved_target_remove=0
+saved_target_rename=0
+cancel_press=0
+cancel_app=0
+selnum=0
+selnum_main=1
+skip_ask_1st_scan=0
+select_target_go=0
+detections=0
+lootreports=0
+hold_scan_btle=""
+hold_scan_btclassic=""
+view_extl=0
+rssitxt_switch="rssitxtsw_hci0"
+priv_name_save=""
+priv_mac_save=""
+priv_name_txt="-+ Name Hidden +-"
+priv_mac_num="12:34:56:78:90:AB"
+priv_mac_txt="░░:░░:░░:░░:░░:░░"
+show_menu_end_OK=1
+scan_BT_AXONCAMS="false"
+scan_BT_CCSKIMMR="false"
+scan_BT_FLIPPERS="false"
+scan_BT_FLOCKCAM="false"
+scan_BT_MESHTAST="false"
+scan_BT_USBKILLS="false"
+scan_BT_PINEAPPS="false"
+# scan_BT_APLAIRTG="false"
+savedTargWarn=1000
+savedTargCrit=3000
+# ---- DEFAULTS ----
+# ---- DEFAULTS SAVED CFG ----
+total_scans=0
+total_detected=0
+scan_privacy=0
+scan_friendly=0
+scan_stealth=0
+scan_btle="true"
+scan_btclassic="true"
+scan_infrepeat=1
+scan_mute="false"
+scan_debug="false"
+custom_oui=""
+custom_name=""
+# number in seconds
+DATA_SCAN_SECONDS=5
+# ---- DEFAULTS SAVED CFG ----
+
+# ---- ARRAYS ----
+declare -A BT_RSSIS
+declare -A BT_NAMES
+declare -A BT_COMPS
+declare -A BT_TARGETS
+declare -A BT_TARGETS_SORT
+declare -A BT_TARGETS_SAVED
+declare -A BT_AXONCAMS
+declare -A BT_CCSKIMMR
+declare -A BT_FLIPPERS
+declare -A BT_FLOCKCAM
+declare -A BT_MESHTAST
+declare -A BT_USBKILLS
+declare -A BT_PINEAPPS
+declare -A BT_CUSTOMOU
+# declare -A BT_APLAIRTG
+# ---- ARRAYS ----
+
+# ---- BLE ----
+BLE_IFACE="hci0"
+
+# ---- REGEX ----
+VALID_MAC="([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}"
+
+cleanup() {
+    killall hcitool 2>/dev/null
+	killall btmon 2>/dev/null
+	killall evtest 2>/dev/null
+	rm "$DATASTREAMBT_FILE" 2>/dev/null
+	rm "$DATASTREAMBT2_FILE" 2>/dev/null
+	rm "$DATASTREAMBT3_FILE" 2>/dev/null
+	rm "$DATASTREAMBTTMP_FILE" 2>/dev/null
+	rm "$KEYCKTMP_FILE" 2>/dev/null
+	btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+	btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+	echo 1 > "$btn_a_path" 2>/dev/null
+	echo 1 > "$btn_b_path" 2>/dev/null
+    exit 0
+}
+trap cleanup EXIT SIGINT SIGTERM SIGHUP
+
+check_dependencies
+check_ringtones
+
+bluepinelogo() {
+	LOG cyan   "¨ ██████╗ ██╗ ¨ ¨ ██╗ ¨ ██╗███████╗¨ ¨ ^x^ . x^ "
+	LOG cyan   "¨ ██╔══██╗██║ ¨ ¨ ██║ ¨ ██║██╔════╝ ^x.:;\,:/_.x^"
+	LOG cyan   "¨ ██████╔╝██║ ¨ ¨ ██║ ¨ ██║█████╗ ¨ ¨ ,\-:.\;/. "
+	LOG cyan   "¨ ██╔══██╗██║ ¨ ¨ ██║ ¨ ██║██╔══╝ ¨ ¨-\.,.|./,/x>"
+	LOG cyan   "¨ ██████╔╝███████╗╚██████╔╝███████╗¨ ¨ (-_v_-) "
+	LOG cyan   "¨ ╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝ ¨ (/-\_/-\) "
+	LOG cyan   "¨¨ ██████╗ ██╗ ███╗ ¨ ██╗ ███████╗ ¨ (_\-/-\-/_) "
+	LOG cyan   "¨¨ ██╔══██╗██║ ████╗¨ ██║ ██╔════╝¨ (\_/-\_/-\_|)"
+	LOG cyan   "¨¨ ██████╔╝██║ ██╔██╗ ██║ █████╗ ¨¨ (/-\_/-\_/-\)"
+	LOG cyan   "¨¨ ██╔═══╝ ██║ ██║╚██╗██║ ██╔══╝ ¨¨ (\_/-\_/-\_|)"
+	LOG cyan   "¨¨ ██║ ¨ ¨ ██║ ██║ ╚████║ ███████╗¨ (/-\_/-\_/-\)"
+	LOG cyan   "¨¨ ╚═╝ ¨ ¨ ╚═╝ ╚═╝¨ ╚═══╝ ╚══════╝ ¨ (\_\\\_//_/) "
+}
+
+#  SET CFG OPTIONS
+# PAYLOAD_GET_CONFIG - Retrieve a permanent payload configuration option
+	# PAYLOAD_GET_CONFIG [payload name] [option]
+# PAYLOAD_SET_CONFIG - Set a permanent payload configuration option
+	# PAYLOAD_SET_CONFIG [payload name] [option] [value]
+# PAYLOAD_DEL_CONFIG - Delete a permanent payload configuration option
+	# PAYLOAD_DEL_CONFIG [payload name] [option]
+
+# load config and check if empty, if so reset to default
+DATA_SCAN_SECONDS=$(PAYLOAD_GET_CONFIG bluepinesuite DATA_SCAN_SECONDS)
+scan_btle=$(PAYLOAD_GET_CONFIG bluepinesuite scan_btle)
+scan_btclassic=$(PAYLOAD_GET_CONFIG bluepinesuite scan_btclassic)
+scan_infrepeat=$(PAYLOAD_GET_CONFIG bluepinesuite scan_infrepeat)
+scan_mute=$(PAYLOAD_GET_CONFIG bluepinesuite scan_mute)
+scan_debug=$(PAYLOAD_GET_CONFIG bluepinesuite scan_debug)
+total_scans=$(PAYLOAD_GET_CONFIG bluepinesuite total_scans)
+total_detected=$(PAYLOAD_GET_CONFIG bluepinesuite total_detected)
+scan_privacy=$(PAYLOAD_GET_CONFIG bluepinesuite scan_privacy)
+scan_friendly=$(PAYLOAD_GET_CONFIG bluepinesuite scan_friendly)
+scan_stealth=$(PAYLOAD_GET_CONFIG bluepinesuite scan_stealth)
+custom_oui=$(PAYLOAD_GET_CONFIG bluepinesuite custom_oui)
+custom_name=$(PAYLOAD_GET_CONFIG bluepinesuite custom_name)
+selnum_main=$(PAYLOAD_GET_CONFIG bluepinesuite selnum_main)
+skip_ask_1st_scan=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_1st_scan)
+
+[[ -z "$DATA_SCAN_SECONDS" ]] && DATA_SCAN_SECONDS=5
+[[ -z "$scan_btle" ]] && scan_btle="true"
+[[ -z "$scan_btclassic" ]] && scan_btclassic="true"
+[[ -z "$scan_infrepeat" ]] && scan_infrepeat=1
+[[ -z "$scan_mute" ]] && scan_mute="false"
+[[ -z "$scan_debug" ]] && scan_debug="false"
+[[ -z "$total_scans" ]] && total_scans=0
+[[ -z "$total_detected" ]] && total_detected=0
+[[ -z "$scan_privacy" ]] && scan_privacy=0
+[[ -z "$scan_friendly" ]] && scan_friendly=0
+[[ -z "$scan_stealth" ]] && scan_stealth=0
+[[ -z "$custom_oui" ]] && custom_oui=""
+[[ -z "$custom_name" ]] && custom_name=""
+[[ -z "$selnum_main" ]] && selnum_main=1
+[[ -z "$skip_ask_1st_scan" ]] && skip_ask_1st_scan=0
+
+# check values of settings
+if [[ "$DATA_SCAN_SECONDS" -gt 2 ]]; then
+	if [[ "$DATA_SCAN_SECONDS" -gt 20 ]]; then
+		DATA_SCAN_SECONDS=5
+	fi
+else
+	DATA_SCAN_SECONDS=5
+fi
+if [[ "$scan_btle" == "true" ]]; then scan_btle="true"; else scan_btle="false"; fi
+if [[ "$scan_btclassic" == "true" ]]; then scan_btclassic="true"; else scan_btclassic="false"; fi
+if [[ "$scan_infrepeat" -eq 1 ]]; then scan_infrepeat=1; else scan_infrepeat=0; fi
+if [[ "$scan_mute" == "true" ]]; then scan_mute="true"; else scan_mute="false"; fi
+if [[ "$scan_debug" == "true" ]] ; then scan_debug="true"; else scan_debug="false"; fi
+if [[ "$scan_friendly" -eq 0 ]]; then
+	text_hunt_UC="Hunt"
+	text_hunt_LC="hunt"
+	text_target_UC="Target"
+	text_target_LC="target"
+else
+	text_hunt_UC="Find"
+	text_hunt_LC="find"
+	text_target_UC="Device"
+	text_target_LC="device"
+fi
+if [[ "$scan_stealth" -eq 1 ]]; then
+	LED OFF
+	btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+	btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+	echo 0 > "$btn_a_path"
+	echo 0 > "$btn_b_path"
+else
+	LED MAGENTA
+	btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+	btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+	echo 1 > "$btn_a_path"
+	echo 1 > "$btn_b_path"
+fi
+# source "./include/funcs_extl.sh"
+# kill evtest if still running and rm old key file
+(killall evtest 2>/dev/null) &
+rm "$KEYCKTMP_FILE"
+
+# check if file is not empty this time around
+if [[ -s "$TARGETMAC_FILE" ]]; then
+	# target_mac_check=$(<"$TARGETMAC_FILE")
+	# read out first line of file only to var
+	IFS= read -r target_mac_check < "$TARGETMAC_FILE"
+	target_mac=$(echo "${target_mac_check}" | grep -oE '([0-9A-F]{2}:){5}[0-9A-F]{2}')
+fi
+
+# warn of global settings enabled
+if [[ "$scan_friendly" -eq 1 ]] || [[ "$scan_privacy" -eq 1 ]] || [[ "$scan_stealth" -eq 1 ]] ; then
+	LOG blue "================================================="
+	if [[ "$scan_stealth" -eq 1 ]] ; then
+		LOG blue "============ Stealth Mode Enabled... ============"
+	fi
+	if [[ "$scan_privacy" -eq 1 ]] ; then
+		LOG blue "============ Privacy Mode Enabled... ============"
+	fi
+	if [[ "$scan_friendly" -eq 1 ]] ; then
+		LOG blue "== (: (: (: Friendly Mode Enabled... :) :) :) ==="
+	fi
+	LOG blue "================================================="
+	sleep 1
+fi
+
+# verify bluetoothd running at start
+bluetoothd_check
+# run saved targets check/load
+saved_targets_check
+# start logo and display
+LOG blue   "|||||||||||||||||||||||||||||||||||||¨¨¨¨¨¨¨¨¨¨¨¨¨"
+sleep 1
+bluepinelogo
+if [[ "$scan_mute" == "false" ]] ; then
+	RINGTONE "flutter" # (short)
+fi
+LOG cyan   "||||||| - Press OK to Start - ||||||| ^^^^^^^^^ ||"
+sleep 0.25
+# LOG blue   "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
+# LOG blue   "||||||||||||||||||||||||||||||||||||||||||||||||||"
+WAIT_FOR_BUTTON_PRESS A
+
+# External Bluetooth Adapter?
+external_bt_check
+
+while true; do
+	scan_custom=0
+	show_menu_end_OK=1
+	main_menu
+	main_option="$selnum"
+	if [[ "$main_option" -eq 1 ]]; then
+		LOG "Running Scan Program...."
+		scan_targeted="false"
+		device_hunter
+	elif [[ "$main_option" -eq 2 ]]; then
+		while true; do
+			scan_BT_AXONCAMS="false"
+			scan_BT_CCSKIMMR="false"
+			scan_BT_FLIPPERS="false"
+			scan_BT_FLOCKCAM="false"
+			scan_BT_MESHTAST="false"
+			scan_BT_USBKILLS="false"
+			scan_BT_PINEAPPS="false"
+			scan_custom=0
+			LOG "Detection...."
+			sub_menu_detection
+			submenu_option="$selnum"
+			if [[ "$submenu_option" -eq 0 ]]; then
+				LOG "Back to Main Menu...."
+				break
+			elif [[ "$submenu_option" -eq 1 ]]; then
+				LOG "Running All Detections...."
+				scan_BT_AXONCAMS="true"
+				scan_BT_CCSKIMMR="true"
+				scan_BT_FLIPPERS="true"
+				scan_BT_FLOCKCAM="true"
+				scan_BT_MESHTAST="true"
+				scan_BT_USBKILLS="true"
+				scan_BT_PINEAPPS="true"
+				scan_detection
+			elif [[ "$submenu_option" -eq 2 ]]; then
+				LOG "Running Detect ALL - Scanned/Saved ${text_target_UC}s...."
+				scan_BT_AXONCAMS="true"
+				scan_BT_CCSKIMMR="true"
+				scan_BT_FLIPPERS="true"
+				scan_BT_FLOCKCAM="true"
+				scan_BT_MESHTAST="true"
+				scan_BT_USBKILLS="true"
+				scan_BT_PINEAPPS="true"
+				scan_detect_from_scanned
+			elif [[ "$submenu_option" -eq 3 ]]; then
+				LOG "Detect Custom OUI/Name - Scanned/Saved ${text_target_UC}s...."
+				enter_custom_oui
+				enter_custom_name
+				if [[ -n "$custom_oui" ]] || [[ -n "$custom_name" ]] ; then
+					scan_custom=1
+					scan_detect_from_scanned
+				else
+					LOG "Custom OUI/Name not set..."
+					LOG " "
+				fi
+			elif [[ "$submenu_option" -eq 4 ]]; then
+				LOG "Running Axon Detection...."
+				scan_BT_AXONCAMS="true"
+				scan_detection
+			elif [[ "$submenu_option" -eq 5 ]]; then
+				LOG "Running CC Skimmer Detection...."
+				scan_BT_CCSKIMMR="true"
+				scan_detection
+			elif [[ "$submenu_option" -eq 6 ]]; then
+				LOG "Running Flipper Detection...."
+				scan_BT_FLIPPERS="true"
+				scan_detection
+			elif [[ "$submenu_option" -eq 7 ]]; then
+				LOG "Running Flock Detection...."
+				scan_BT_FLOCKCAM="true"
+				scan_detection
+			elif [[ "$submenu_option" -eq 8 ]]; then
+				LOG "Running Meshtastic Detection...."
+				scan_BT_MESHTAST="true"
+				scan_detection
+			elif [[ "$submenu_option" -eq 9 ]]; then
+				LOG "Running USB Kill Detection...."
+				scan_BT_USBKILLS="true"
+				scan_detection
+			elif [[ "$submenu_option" -eq 10 ]]; then
+				LOG "Running WiFi Pineapple Detection...."
+				scan_BT_PINEAPPS="true"
+				scan_detection
+			fi
+		done
+	elif [[ "$main_option" -eq 3 ]]; then
+		LOG "View ${text_target_UC}s / Select ${text_target_UC}...."
+		select_target
+	elif [[ "$main_option" -eq 4 ]]; then
+		while true; do
+			LOG "Probe...."
+			sub_menu_probe
+			submenu_option="$selnum"
+			if [[ "$submenu_option" -eq 0 ]]; then
+				LOG "Back to Main Menu...."
+				break
+			elif [[ "$submenu_option" -eq 1 ]]; then
+				LOG "${text_hunt_UC} ${text_target_UC}...."
+				scan_targeted="true"
+				device_hunter
+			elif [[ "$submenu_option" -eq 2 ]]; then
+				LOG "Browse Services...."
+				bt_browse_services
+			elif [[ "$submenu_option" -eq 3 ]]; then
+				LOG "Get Device Info...."
+				bt_get_info
+			elif [[ "$submenu_option" -eq 4 ]]; then
+				LOG "Get Device Vendor...."
+				bt_get_vendor
+			elif [[ "$submenu_option" -eq 5 ]]; then
+				LOG "Verify ${text_target_UC} Connection...."
+				bt_verif_conn
+			elif [[ "$submenu_option" -eq 6 ]]; then
+				sub_items_extl
+			fi
+		done 
+	elif [[ "$main_option" -eq 5 ]]; then
+		LOG "${text_hunt_UC} Custom OUI/Name...."
+		enter_custom_oui
+		enter_custom_name
+		if [[ -n "$custom_oui" || -n "$custom_name" ]] ; then
+			scan_custom=1
+			device_hunter
+		else
+			LOG "Custom OUI/Name not set..."
+			LOG " "
+		fi
+	elif [[ "$main_option" -eq 6 ]]; then
+		while true; do
+			saved_target_select=0
+			saved_target_remove=0
+			saved_target_rename=0
+			LOG "Manage Saved ${text_target_UC}s...."
+			sub_menu_savedtargoptions
+			submenu_option="$selnum"
+			if [[ "$submenu_option" -eq 0 ]]; then
+				LOG "Back to Main Menu...."
+				break
+			elif [[ "$submenu_option" -eq 1 ]]; then
+				LOG "View Saved ${text_target_UC}s...."
+				saved_targets_list
+			elif [[ "$submenu_option" -eq 2 ]]; then
+				LOG "Save Current ${text_target_UC}...."
+				saved_targets_savecurrent
+			elif [[ "$submenu_option" -eq 3 ]]; then
+				LOG "Set ${text_target_UC} MAC...."
+				resp=$(CONFIRMATION_DIALOG "Confirm entering new ${text_target_UC} MAC?")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					target_mac_old="$target_mac"
+					if [[ "$scan_privacy" -eq 1 ]] ; then target_mac_old="$priv_mac_num"; fi
+					while true; do
+						# run input
+						target_mac=$(MAC_PICKER "${text_target_UC} MAC" "$target_mac_old")
+						# Confirm Random MAC sufficient
+						if [[ "$target_mac" =~ $VALID_MAC ]]; then
+							resp=$(CONFIRMATION_DIALOG "This ${text_target_UC} MAC OK? ${target_mac}")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								break
+							fi
+							LOG red "Skipping MAC: ${target_mac}, input new..."
+						else 
+							LOG red "Invalid MAC: ${target_mac}, input new..."
+						fi
+						sleep 1
+					done
+					echo "$target_mac" > "$TARGETMAC_FILE"
+					LOG blue "================================================="
+					LOG green "${text_target_UC} MAC: ${target_mac}"
+					LOG blue "================================================="
+				fi
+			elif [[ "$submenu_option" -eq 4 ]]; then
+				LOG "Clear Current ${text_target_UC}...."
+				current_target_clear
+			elif [[ "$submenu_option" -eq 5 ]]; then
+				LOG "Select from Saved ${text_target_UC}s...."
+				saved_target_select=1
+				saved_targets_list
+			elif [[ "$submenu_option" -eq 6 ]]; then
+				LOG "Save ALL Scan ${text_target_UC}s...."
+				saved_targets_saveall
+			elif [[ "$submenu_option" -eq 7 ]]; then
+				LOG "Save/Load Saved ${text_target_UC}s File...."
+				saved_targets_saveload
+			elif [[ "$submenu_option" -eq 8 ]]; then
+				LOG "Rename/Remove Saved ${text_target_UC}...."
+				saved_target_rename=1
+				saved_target_remove=1
+				saved_targets_list
+			elif [[ "$submenu_option" -eq 9 ]]; then
+				LOG "Remove Saved ${text_target_UC}s by Custom OUI/Name...."
+				enter_custom_oui
+				enter_custom_name
+				if [[ -n "$custom_oui" || -n "$custom_name" ]] ; then
+					saved_target_remove_custom
+				else
+					LOG "Custom OUI/Name not set..."
+					LOG " "
+				fi
+			elif [[ "$submenu_option" -eq 10 ]]; then
+				LOG "Clear Saved ${text_target_UC}s...."
+				saved_targets_clear
+			fi
+		done
+	elif [[ "$main_option" -eq 7 ]]; then
+		while true; do
+			LOG "Preferences...."
+			sub_menu_preferences
+			submenu_option="$selnum"
+			if [[ "$submenu_option" -eq 0 ]]; then
+				LOG "Back to Main Menu...."
+				break
+			elif [[ "$submenu_option" -eq 1 ]]; then
+				LOG "Global Settings Config...."
+				global_config
+			elif [[ "$submenu_option" -eq 2 ]]; then
+				while true; do
+					LOG "Manage Bluetooth...."
+					sub_sub_menu_managebt
+					submenu_option="$selnum"
+					if [[ "$submenu_option" -eq 0 ]]; then
+						LOG "Back to Preferences...."
+						break
+					elif [[ "$submenu_option" -eq 1 ]]; then
+						LOG "Change Bluetooth Name...."
+						if hciconfig | grep -q hci0; then
+							resp=$(CONFIRMATION_DIALOG "Modify hci0 Bluetooth Name?")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								update_bluetooth_name "hci0"
+							else 
+								LOG "Change Name skipped for hci0..."
+							fi
+						fi
+						if hciconfig | grep -q hci1; then
+							resp=$(CONFIRMATION_DIALOG "Modify hci1 Bluetooth Name?")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								update_bluetooth_name "hci1"
+							else 
+								LOG "Change Name skipped for hci1..."
+							fi
+						fi
+					elif [[ "$submenu_option" -eq 2 ]]; then
+						LOG "Change Bluetooth MAC / Alias...."
+						if hciconfig | grep -q hci1; then
+							if [[ "$enable_CSR_func" -eq 0 ]]; then
+								LOG red "WARNING: USB CSR BT not detected!"
+								LOG red "WARNING: Changing MAC on USB BT may not work!"
+							fi
+							update_bluetooth_mac "hci1"
+						else
+							LOG red "Bluetooth MAC cannot be changed for hci0!"
+						fi
+					elif [[ "$submenu_option" -eq 3 ]]; then
+						LOG "Change Bluetooth Status / Discovery Setting...."
+						if hciconfig | grep -q hci0; then
+							resp=$(CONFIRMATION_DIALOG "Modify hci0 Status/Discovery Setting?")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								update_bluetooth_status "hci0"
+							else 
+								LOG "Change Status/Discovery Setting skipped for hci0..."
+							fi
+						fi
+						if hciconfig | grep -q hci1; then
+							resp=$(CONFIRMATION_DIALOG "Modify hci1 Status/Discovery Setting?")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								update_bluetooth_status "hci1"
+							else 
+								LOG "Change Status/Discovery Setting skipped for hci1..."
+							fi
+						fi
+					elif [[ "$submenu_option" -eq 4 ]]; then
+						LOG "Retest USB Bluetooth for CSR...."
+						external_bt_check
+					fi
+				done
+				submenu_option=0
+			elif [[ "$submenu_option" -eq 3 ]]; then
+				LOG "Sound...."
+				mute_config
+			elif [[ "$submenu_option" -eq 4 ]]; then
+				LOG "Debug Mode...."
+				debug_config
+			elif [[ "$submenu_option" -eq 5 ]]; then
+				LOG "Stealth Mode / Disable LEDS...."
+				stealth_config
+			elif [[ "$submenu_option" -eq 6 ]]; then
+				LOG "Clear History / Data / Settings...."
+				resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL History / Scan Counts? ")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					sleep 1
+					resp=$(CONFIRMATION_DIALOG "CONFIRM CLEAR ALL History / Scan Counts? - THIS ACTION CANNOT BE REVERSED!")
+					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+						PAYLOAD_DEL_CONFIG bluepinesuite total_scans
+						PAYLOAD_DEL_CONFIG bluepinesuite total_detected
+						total_scans=0; total_detected=0
+						LOG green "Total Scans + Detected cleared!"				
+						LOG "Press OK to continue..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+						sleep 0.25
+					fi
+				fi
+				resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL ${text_target_UC}s / Saved ${text_target_UC}s? ")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					sleep 1
+					resp=$(CONFIRMATION_DIALOG "CONFIRM CLEAR ALL ${text_target_UC}s / Saved ${text_target_UC}? - THIS ACTION CANNOT BE REVERSED!")
+					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+						BT_RSSIS=()
+						BT_NAMES=()
+						BT_COMPS=()
+						BT_FLIPPERS=()
+						BT_USBKILLS=()
+						BT_PINEAPPS=()
+						BT_TARGETS=()
+						LOG "ALL Scan ${text_target_UC}s cleared!"
+						rm "$SAVEDTARGETS_FILE" 2>/dev/null
+						saved_targets_check
+						LOG "ALL Saved ${text_target_UC}s cleared!"
+						target_mac=""
+						echo "$target_mac" > "$TARGETMAC_FILE"
+						LOG "${text_target_UC} MAC cleared!"
+						LOG green "All ${text_target_UC}s / Saved ${text_target_UC}s cleared..."
+						LOG "Press OK to continue..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+						sleep 0.25
+					fi
+				fi
+				resp=$(CONFIRMATION_DIALOG "Do you want to Reset Configuration to Default? ")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					sleep 1
+					resp=$(CONFIRMATION_DIALOG "CONFIRM Reset Configuration to Default? - THIS ACTION CANNOT BE REVERSED!")
+					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+						LOG "Resetting configuration..."
+						# defaults from above
+						scan_btle="true"
+						scan_btclassic="true"
+						scan_infrepeat=1
+						scan_mute="false"
+						scan_debug="true"
+						scan_targeted="false"
+						scan_privacy=0
+						scan_friendly=0
+						scan_stealth=0
+						DATA_SCAN_SECONDS=5
+						custom_oui=""
+						custom_name=""
+						LED MAGENTA
+						btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+						btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+						btn_a_state=$(cat "$btn_a_path")
+						btn_b_state=$(cat "$btn_b_path")
+						if [ "$btn_a_state" -eq 0 ] || [ "$btn_b_state" -eq 0 ] ; then
+							echo 1 > "$btn_a_path"
+							echo 1 > "$btn_b_path"
+							# LOG "A + B Button LEDS restored..."
+						fi
+						# save config
+						PAYLOAD_SET_CONFIG bluepinesuite DATA_SCAN_SECONDS "$DATA_SCAN_SECONDS"
+						PAYLOAD_SET_CONFIG bluepinesuite scan_btle "$scan_btle"
+						PAYLOAD_SET_CONFIG bluepinesuite scan_btclassic "$scan_btclassic"
+						PAYLOAD_SET_CONFIG bluepinesuite scan_infrepeat "$scan_infrepeat"
+						PAYLOAD_SET_CONFIG bluepinesuite scan_mute "$scan_mute"
+						PAYLOAD_SET_CONFIG bluepinesuite scan_debug "$scan_debug"
+						PAYLOAD_SET_CONFIG bluepinesuite scan_privacy "$scan_privacy"
+						PAYLOAD_SET_CONFIG bluepinesuite scan_friendly "$scan_friendly"
+						PAYLOAD_SET_CONFIG bluepinesuite scan_stealth "$scan_stealth"
+						PAYLOAD_SET_CONFIG bluepinesuite custom_oui "$custom_oui"
+						PAYLOAD_SET_CONFIG bluepinesuite custom_name "$custom_name"
+						LOG "Settings saved..."
+						# defaults from above
+						LOG green "Configuration reset!"
+						LOG "Press OK to continue..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+						sleep 0.25
+					fi
+				fi
+				resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL Report + Log Files? ")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					lootreports=$(find "$LOOT_SCAN" "$LOOT_DETECT" "$LOOT_PROBE" -maxdepth 1 -type f -name "Report*" -print | wc -l)
+					lootdetects=$(find "$LOOT_DETECT" -maxdepth 1 -type f -name "DetectTargets*" -print | wc -l)
+					lootreports=$((lootreports + lootdetects))
+					sleep 1
+					LOG cyan "$lootreports Report Files Found..."	
+					LOG "Debug/Log Files are not counted..."			
+					LOG "Press OK to confirm..."
+					LOG " "
+					WAIT_FOR_BUTTON_PRESS A
+					sleep 0.25
+					resp=$(CONFIRMATION_DIALOG "CONFIRM CLEAR ALL Report + Log Files? - THIS ACTION CANNOT BE REVERSED!")
+					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+						LOG "Deleting files in ${LOOT_SCAN}..."
+						rm -rf "${LOOT_SCAN}"/*
+						LOG "Deleting files in ${LOOT_DETECT}..."
+						rm -rf "${LOOT_DETECT}"/*
+						LOG "Deleting files in ${LOOT_PROBE}..."
+						rm -rf "${LOOT_PROBE}"/*
+						LOG green "Report + Log Files Deleted!"				
+						LOG "Press OK to continue..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+						sleep 0.25
+					fi
+				fi
+			elif [[ "$submenu_option" -eq 7 ]]; then
+				while true; do
+					LOG "Extra...."
+					sub_sub_menu_extra
+					submenu_option="$selnum"
+					if [[ "$submenu_option" -eq 0 ]]; then
+						LOG "Back to Preferences...."
+						break
+					elif [[ "$submenu_option" -eq 1 ]]; then
+						LOG "Privacy / Streamer Mode...."
+						privacy_config
+					elif [[ "$submenu_option" -eq 2 ]]; then
+						LOG "Friendly Mode...."
+						friendly_config
+					elif [[ "$submenu_option" -eq 3 ]]; then
+						LOG "Skip Asking to Save Results after 1st Scan...."
+						skip_ask_config
+					elif [[ "$submenu_option" -eq 4 ]]; then
+						LOG "Restore A + B LEDS...."
+						restore_ableds
+					fi
+				done
+			fi
+		done
+	elif [[ "$main_option" -eq 8 ]]; then
+		LOG "Info...."
+		show_menu_end_OK=0
+		lootreports=$(find "$LOOT_SCAN" "$LOOT_DETECT" "$LOOT_PROBE" -maxdepth 1 -type f -name "Report*" -print | wc -l)
+		lootdetects=$(find "$LOOT_DETECT" -maxdepth 1 -type f -name "DetectTargets*" -print | wc -l)
+		loottargets=$(find "$LOOT_TARGETS" -maxdepth 1 -type f -name "SavedTargets_*" -print | wc -l)
+		lootreports=$((lootreports + lootdetects + loottargets))
+		MAC_CHECK=$(hciconfig $BLE_IFACE | grep 'BD Address' | awk '{print $3}')
+		NAME_CHECK=$(hciconfig -a $BLE_IFACE | grep "Name:" | awk -F"'" '{print $2}')
+		target_count="${#BT_TARGETS[@]}"
+		saved_target_count="${#BT_TARGETS_SAVED[@]}"
+		if [[ "$scan_privacy" -eq 1 ]] ; then MAC_CHECK="${MAC_CHECK:0:2}:░░:░░:░░:░░:░░"; NAME_CHECK="$priv_name_txt"; fi
+		LOG magenta "================================ Device Info ===="
+		LOG cyan "BT Device: $BLE_IFACE | MAC Address: $MAC_CHECK"
+		LOG "Device Name: $NAME_CHECK"
+		if [[ "$enable_CSR_func" -eq 1 ]] ; then
+			LOG green "CSR Functionality Enabled | Loot/Reports: $lootreports"
+		else
+			LOG red "CSR Functionality DISABLED | Loot/Reports: $lootreports"
+		fi
+		sleep 0.25
+		LOG magenta "================================== Scan Info ===="
+		LOG cyan "Total Scans: $total_scans | Malicious Items Found: $total_detected"
+		LOG "Current ${text_target_UC}s: $target_count | Saved ${text_target_UC}s: $saved_target_count"
+		if [[ -n "$target_mac" ]]; then
+			if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$target_mac"; target_mac="${target_mac:0:2}:░░:░░:░░:░░:░░"; fi
+			LOG "Current ${text_target_UC}: $target_mac"
+			if [[ "$scan_privacy" -eq 1 ]] ; then target_mac="$priv_mac_save"; fi
+		else
+			LOG "Current ${text_target_UC}: None"
+		fi
+		if [[ -n "$custom_oui" ]] || [[ -n "$custom_name" ]] ; then
+			if [[ "$scan_privacy" -eq 1 ]] ; then 
+				priv_mac_save="$custom_oui"
+				priv_name_save="$custom_name"
+				custom_oui="${custom_oui:0:2}:░░:░░"
+				custom_name="$priv_name_txt"
+			fi
+			if [[ -n "$custom_name" ]] ; then
+				LOG "${text_target_UC} OUI: $custom_oui | Custom Name: $custom_name"
+			else
+				LOG "${text_target_UC} OUI: $custom_oui | Custom Name not set..."
+			fi
+			if [[ "$scan_privacy" -eq 1 ]] ; then custom_oui="$priv_mac_save"; custom_name="$priv_name_save"; fi
+		else
+			LOG "Custom OUI/Name not set"
+		fi
+		sleep 0.25
+		LOG magenta "============================== Scan Settings ===="
+		if [[ "$scan_btclassic" == "true" ]] && [[ "$scan_btle" == "true" ]] ; then
+			LOG cyan "Scan Classic + LE Bluetooth for ${DATA_SCAN_SECONDS}s each"
+		else 
+			if [[ "$scan_btclassic" == "true" ]] ; then
+				LOG cyan "Scan Classic Bluetooth for ${DATA_SCAN_SECONDS}s"
+			fi
+			if [[ "$scan_btle" == "true" ]] ; then
+				LOG cyan "Scan LE Bluetooth for ${DATA_SCAN_SECONDS}s"
+			fi
+		fi
+		if [[ "$scan_mute" == "false" ]] ; then
+			LOG "Repeat: $scan_infrepeat | Sound effects: On | Debug: $scan_debug"
+		else
+			LOG "Repeat: $scan_infrepeat | Sound effects: Off | Debug: $scan_debug"
+		fi
+		LOG "Stealth Mode: $scan_stealth | Privacy: $scan_privacy | Friendly: $scan_friendly"
+		# LOG magenta "======================================= Info ===="
+		sleep 3
+		LOG magenta "= Press OK to Return to Main Menu... == Info ===="
+		WAIT_FOR_BUTTON_PRESS A
+		LOG " "
+	fi
+	if [[ "$show_menu_end_OK" -eq 2 ]] ; then
+		LOG green "Press OK to Return to Main Menu..."
+		WAIT_FOR_BUTTON_PRESS A
+		LOG " "
+	fi
+	sleep 0.5
+done
+
+
+LOG blue   "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
+LOG cyan   "░░░░░░░░░░░░ Thank you for playing! ░░░░░░░░░░░░░░"
+LOG blue   "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"; LOG " "; exit 0
