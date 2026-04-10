@@ -1,8 +1,10 @@
 # BluePine
 # Bluetooth Scanning Suite for the Hak5 WiFi Pineapple Pager
-To install/run, copy the "bt-bluepine" folder with "include" subfolder to the folder of your choice on the pager under payloads and run "BluePine".
+To install/run, copy the "bt-bluepine" folder with "include" subfolder to the folder of your choice on the pager under payloads and run "BluePine".  
 
 Ex. "/mmc/root/payloads/user/recon/bt-bluepine" would put "BluePine" under the "Recon" menu.
+
+On first run it will run through an automated install for dependency "evtest" which monitors the pagers input buttons for pausing/stopping infinite scans, and "GNU grep" for more efficient pattern matching.  After dependencies are checked/installed, ringtones will be verified and copied if they do not exist.  When dependencies and ringtones are met, you will reach the BluePine menu and these items will be checked silently each start of the app without being prompted again.
 
 
 # Menus
