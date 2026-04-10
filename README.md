@@ -8,6 +8,7 @@ On first run it will run through an automated install for dependency "evtest" wh
 
 Each time the app starts, it will prompt you asking about a USB Bluetooth Adapter to select which Bluetooth interface to use for scanning.  Using a USB CSR8510 / CSR v4.0 Bluetooth Adapter instead of the Pagers internal Bluetooth provides better range and ability to change MAC address.
 
+MAC details and device names are hidden in the images below due to "Privacy Mode" being enabled. Privacy Mode allows you to hide major details on the pager screen/display while keeping full functionality.
 
 # Menus
 ![BluePine Menus](images/BT-bluepine.jpg)
