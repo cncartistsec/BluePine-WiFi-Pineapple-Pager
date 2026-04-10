@@ -6,6 +6,8 @@ Ex. "/mmc/root/payloads/user/recon/bt-bluepine" would put "BluePine" under the "
 
 On first run it will run through an automated install for dependency "evtest" which monitors the pagers input buttons for pausing/stopping infinite scans, and "GNU grep" for more efficient pattern matching.  After dependencies are checked/installed, ringtones will be verified and copied if they do not exist.  When dependencies and ringtones are met, you will reach the BluePine menu and these items will be checked silently each start of the app without being prompted again.
 
+Each time the app starts, it will prompt you asking about a USB Bluetooth Adapter to select which Bluetooth interface to use for scanning.  Using a USB CSR8510 / CSR v4.0 Bluetooth Adapter instead of the Pagers internal Bluetooth provides better range and ability to change MAC address.
+
 
 # Menus
 ![BluePine Menus](images/BT-bluepine.jpg)
