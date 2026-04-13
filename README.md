@@ -2,13 +2,14 @@
 # Bluetooth Scanning Suite for the Hak5 WiFi Pineapple Pager
 To install/run, copy the "bt-bluepine" folder with "include" subfolder to the folder of your choice on the pager under payloads and run "BluePine".  
 
-Ex. "/mmc/root/payloads/user/recon/bt-bluepine" would put "BluePine" under the "Recon" menu.
+Ex. "/mmc/root/payloads/user/reconnaissance/bt-bluepine" would put "BluePine" under the "Reconnaissance" menu.
 
 On first run it will run through an automated install for dependency "evtest" which monitors the pagers input buttons for pausing/stopping infinite scans, and "GNU grep" for more efficient pattern matching.  After dependencies are checked/installed, ringtones will be verified and copied if they do not exist.  When dependencies and ringtones are met, you will reach the BluePine menu and these items will be checked silently each start of the app without being prompted again.
 
 Each time the app starts, it will prompt you asking about a USB Bluetooth Adapter to select which Bluetooth interface to use for scanning.  Using a USB CSR8510 / CSR v4.0 Bluetooth Adapter instead of the Pagers internal Bluetooth provides better range and ability to change MAC address.
 
 MAC details and device names are hidden in the images below due to "Privacy Mode" being enabled. Privacy Mode allows you to hide major details on the pager screen/display while keeping full functionality.  Privacy mode is disabled by default and can be enabled in Preferences -> Extra.
+
 
 # Menus
 ![BluePine Menus](images/BT-bluepine.jpg)
@@ -27,7 +28,7 @@ MAC details and device names are hidden in the images below due to "Privacy Mode
 # Title: BluePine
 # Author: cncartist
 # Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range and inability to change the built in MAC.
-# Category: csec/recon
+# Category: reconnaissance
 # Version: 1.0
 # 
 # ============================================
@@ -98,16 +99,16 @@ MAC details and device names are hidden in the images below due to "Privacy Mode
 #  -- -- -- -- - The pause/stop action is recorded but cannot be paused/stopped while BT scanning.
 #  -- -- -- -- - It may take a couple seconds to process the pause/stop command.
 #  -- -- -- -- - If you do not stop/finish the scan, targets are not saved and you are only viewing the scan details on the screen.
-#  -- -- -- Before each Scan, you can choose default/unchanged Scan settings, or Modify Scan settings.
-#  -- -- -- -- - Pre-Scan Modify allows changing Scan duration and Scanning Classic + LE combined or separate.
-#  -- -- -- -- - You would only choose one type if you knew which one has the BT device(s) you're searching for.
-#  -- -- -- If locating a specific item, sometimes it's best to get multiple scans in close proximity to confirm the strength is accurate.
 #  -- -- -- -- - It may pause instantly to as little as a few seconds, or the total time of "scanning/BLUE LED blinking" to pause/stop.
 #  -- -- -- -- - This is to prevent stopping the actual bluetooth scans.
 #  -- -- -- -- - Check for pause/stop is only done at certain points in the scanning process.
 #  -- -- -- -- - You are able to pause, then continue scanning, or stop and add targets and/or return to main menu.
 #  -- -- -- -- - Targets are not permanently saved until confirming to save them to Saved Targets.
 #  -- -- -- -- - Best time to press pause/stop is after the final processing step/RED LED solid, before results are shown/MAGENTA LED solid.
+#  -- -- -- Before each Scan, you can choose default/unchanged Scan settings, or Modify Scan settings.
+#  -- -- -- -- - Pre-Scan Modify allows changing Scan duration and Scanning Classic + LE combined or separate.
+#  -- -- -- -- - You would only choose one type if you knew which one has the BT device(s) you're searching for.
+#  -- -- -- If locating a specific item, sometimes it's best to get multiple scans in close proximity to confirm the strength is accurate.
 #  -- -- -- The best way to get used to the sensitivity is to scan for known devices and locate them within close range to see the sensitivity received.
 #  -- -- -- There are many factors in Bluetooth sensitivity; walls & windows bounce or weaken signal, desks/objects can weaken signal, orientation of the pager can matter, and signals can look weak until you get closer to the actual source/Bluetooth chip on the target device. 
 #  -- -- -- Using an external USB CSR8510 / CSR v4.0 Bluetooth Adapter, you can achieve better sensitivity and range.
