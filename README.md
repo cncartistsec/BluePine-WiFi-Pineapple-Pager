@@ -1,6 +1,6 @@
 # BluePine
 # Bluetooth Scanning Suite for the Hak5 WiFi Pineapple Pager
-To install/run, copy the "bt-bluepine" folder with "include" subfolder to the folder of your choice on the pager under payloads and run "BluePine".  
+To install/run, copy the "bt-bluepine" folder with "include" subfolder to the folder of your choice on the pager in "/mmc/root/payloads/user/" and run "BluePine".
 
 Ex. "/mmc/root/payloads/user/reconnaissance/bt-bluepine" would put "BluePine" under the "Reconnaissance" menu.
 
@@ -11,8 +11,8 @@ Each time the app starts, it will prompt you asking about a USB Bluetooth Adapte
 MAC details and device names are hidden in the images below due to "Privacy Mode" being enabled. Privacy Mode allows you to hide major details on the pager screen/display while keeping full functionality.  Privacy mode is disabled by default and can be enabled in Preferences -> Extra.
 
 
-# Menus
-![BluePine Menus](images/BT-bluepine.jpg)
+# Menus/Scanning
+![BluePine Menus/Scanning](images/BT-bluepine.jpg)
 
 # Custom OUI/Name Search
 ![Custom OUI/Name Search](images/BT-bluepine-custom.jpg)
@@ -22,6 +22,13 @@ MAC details and device names are hidden in the images below due to "Privacy Mode
 
 # Saved Target Loading + Save/Load File
 ![BluePine Saved Target Loading + Save/Load File](images/BT-bluepine-saveload.jpg)
+
+# Changing List Picker Font Size
+The default font size for the list picker is set at medium as seen below:
+![Theme Config - Compare Size](images/theme-cfg-list-compare.jpg)
+
+To change it to small, [please use this tool](https://github.com/cncartistsec/WiFi-Pineapple-Pager-Payloads/tree/main/theme-cfg-list-font) which changes files relating to the list picker font size to be smaller, can return back to default.  Theme needs to be reloaded after changing to apply.
+
 
 
 
@@ -66,7 +73,7 @@ MAC details and device names are hidden in the images below due to "Privacy Mode
 #  -- Bluetooth Discoverable Setting Changer + Bluetooth Hardware Name Changer.
 #  -- -- -- Can change both USB + Internal Settings.
 #  -- Bluetooth MAC Address Changer for USB CSR8510 / CSR v4.0 Bluetooth Adapter.
-#  -- -- -- Tool will act on hci1 by default and has been tested to work on various CSR8510 Bluetooth Adapters (range from $5-10).  Can also permanently change Alias/Name for specific MAC as an option, or restore the old name before change.  Boot the pager first before plugging in USB BT Adapter to ensure it gets hci1 instead of hci0.
+#  -- -- -- Bluetooth MAC Address Changer will act on hci1 by default and has been tested to work on various CSR8510 Bluetooth Adapters (range from $5-10).  Can also permanently change Alias/Name for specific MAC as an option, or restore the old name before change.  Boot the pager first before plugging in USB BT Adapter to ensure it gets hci1 instead of hci0.
 #  -- Last Target and Saved Targets list management.
 #  -- -- -- Saved Targets list can be built over time, recommended to keep under a certain number and a warning will show when loading the payload with saved targets greater than the warn number.
 #  -- -- -- You'll experience performance impacts loading the payload, viewing, or scanning Targets if the list is over the warn number.  It's been tested to over 6000 random MACs + Names without any crashes but takes minutes to load the list for display.
