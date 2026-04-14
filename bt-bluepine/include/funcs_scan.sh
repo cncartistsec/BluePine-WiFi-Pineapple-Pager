@@ -539,6 +539,7 @@ device_hunter() {
 				sed -i '
 				s/Acuity Brands Lighting, Inc/Acuity/; 
 				s/Afero, Inc./Afero/; 
+				s/Airoha Technology Corp./Airoha/; 
 				s/Amazon.com Services, Inc.\./Amazon/; 
 				s/Amazon.com Services, Inc./Amazon/; 
 				s/Amazon.com Services, LLC (formerly Amazon Fulfillment Service)/Amazon/; 
@@ -547,6 +548,7 @@ device_hunter() {
 				s/Apple, Inc./Apple/; 
 				s/Aruba Networks/Aruba HP/; 
 				s/August Home, Inc/August Home/; 
+				s/Automotive Data Solutions Inc/Automotive Data Solutions/; 
 				s/Bestechnic(Shanghai),Ltd/Bestechnic/; 
 				s/Bluetrum Technology Co.,Ltd/Bluetrum/; 
 				s/Bose Corporation/Bose/; 
@@ -556,6 +558,7 @@ device_hunter() {
 				s/Ericsson Technology Licensing/Ericsson/; 
 				s/Etekcity Corporation/Etekcity/; 
 				s/Facebook, Inc./Facebook/; 
+				s/Fugoo, Inc./Fugoo/; 
 				s/Garmin International, Inc./Garmin/; 
 				s/GD Midea Air-Conditioning Equipment Co., Ltd./Midea AC/; 
 				s/GoPro, Inc./GoPro/; 
@@ -574,10 +577,12 @@ device_hunter() {
 				s/iRobot Corporation/iRobot/; 
 				s/KiteSpring Inc./KiteSpring/; 
 				s/Klipsch Group, Inc./Klipsch/; 
+				s/Leviton Mfg. Co., Inc./Leviton/; 
 				s/LG Electronics/LG/; 
 				s/\[LG\] webOS TV/LG webOSTV/; 
 				s/Lippert Components, INC/Lippert/; 
 				s/LumiGeek LLC/LumiGeek/; 
+				s/Nerbio Medical Software Platforms Inc/Nerbio Medical/; 
 				s/Nest Labs Inc/Nest/; 
 				s/Nikon Corporation/Nikon/; 
 				s/Nintendo Co., Ltd./Nintendo/; 
@@ -590,6 +595,7 @@ device_hunter() {
 				s/Phillips Connect Technologies LLC/Phillips/; 
 				s/Razer Inc./Razer/; 
 				s/Resmed Ltd/Resmed/; 
+				s/Revvo Technologies, Inc./Revvo/; 
 				s/Rivian Automotive, LLC/Rivian/; 
 				s/SALTO SYSTEMS S.L./SALTO/; 
 				s/Samsung Electronics Co. Ltd./Samsung/; 
@@ -600,6 +606,7 @@ device_hunter() {
 				s/Schrader Electronics/Schrader/; 
 				s/Seiko Epson Corporation/Epson/; 
 				s/Seibert Williams Glass, LLC/SW Glass/; 
+				s/SGL Italia S.r.l./SGL Italia/; 
 				s/Signify Netherlands B.V. (formerly Philips Lighting B.V.)/Signify/; 
 				s/SimpliSafe, Inc./SimpliSafe/; 
 				s/Skullcandy, Inc./Skullcandy/; 
@@ -625,10 +632,6 @@ device_hunter() {
 				s/Zhuhai Jieli technology Co.,Ltd/Zhuhai/; 
 				' "$DATASTREAMBT_FILE"
 				
-				
-				
-				# 
-				# 
 				# 
 				# 
 				# try these
