@@ -329,10 +329,9 @@ device_hunter() {
 			if [[ "$scan_btclassic" == "true" ]] ; then
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE SLOW; fi
 				# LOG red "hcitool"
-				# (hcitool -i "$BLE_IFACE" lescan) &
-				(timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan) &
+				# (timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan) &
+				(timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan --length=$DATA_SCAN_SECONDS) &
 				# LOG red "sleep"
-				# sleep $((DATA_SCAN_SECONDS + 1))
 				sleep ${DATA_SCAN_SECONDS}
 				if [[ "$scan_btle" == "true" ]] ; then
 					reset_bt_adapter
@@ -1126,10 +1125,9 @@ detect_bt_classic() {
 	(timeout --signal=SIGINT "$((DATA_SCAN_SECONDS+2))s" btmon &> "$DATASTREAMBTTMP_FILE") &
 	sleep 1
 	# LOG red "hcitool"
-	# (hcitool -i "$BLE_IFACE" lescan) &
-	(timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan) &
+	# (timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan) &
+	(timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan --length=$DATA_SCAN_SECONDS) &
 	# LOG red "sleep"
-	# sleep $((DATA_SCAN_SECONDS + 1))
 	sleep ${DATA_SCAN_SECONDS}
 		
 	#finish scans
