@@ -40,7 +40,7 @@
 #  -- Bluetooth Discoverable Setting Changer + Bluetooth Hardware Name Changer.
 #  -- -- -- Can change both USB + Internal Settings.
 #  -- Bluetooth MAC Address Changer for USB CSR8510 / CSR v4.0 Bluetooth Adapter.
-#  -- -- -- Tool will act on hci1 by default and has been tested to work on various CSR8510 Bluetooth Adapters (range from $5-10).  Can also permanently change Alias/Name for specific MAC as an option, or restore the old name before change.  Boot the pager first before plugging in USB BT Adapter to ensure it gets hci1 instead of hci0.
+#  -- -- -- Bluetooth MAC Address Changer will act on hci1 by default and has been tested to work on various CSR8510 Bluetooth Adapters (range from $5-10).  Can also permanently change Alias/Name for specific MAC as an option, or restore the old name before change.  Boot the pager first before plugging in USB BT Adapter to ensure it gets hci1 instead of hci0.
 #  -- Last Target and Saved Targets list management.
 #  -- -- -- Saved Targets list can be built over time, recommended to keep under a certain number and a warning will show when loading the payload with saved targets greater than the warn number.
 #  -- -- -- You'll experience performance impacts loading the payload, viewing, or scanning Targets if the list is over the warn number.  It's been tested to over 6000 random MACs + Names without any crashes but takes minutes to load the list for display.
