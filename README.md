@@ -24,10 +24,11 @@ MAC details and device names are hidden in the images below due to "Privacy Mode
 ![BluePine Saved Target Loading + Save/Load File](images/BT-bluepine-saveload.jpg)
 
 # Changing List Picker Font Size
-The default font size for the list picker is set at medium as seen below:
+The default font size for the list picker is set at medium as seen below (on the right):
+
 ![Theme Config - Compare Size](images/theme-cfg-list-compare.jpg)
 
-To change it to small, [please use this tool](https://github.com/cncartistsec/WiFi-Pineapple-Pager-Payloads/tree/main/theme-cfg-list-font) which changes files relating to the list picker font size to be smaller, can return back to default.  Theme needs to be reloaded after changing to apply.
+BluePines menus look best if the list picker font size is small.  [Please use this tool](https://github.com/cncartistsec/WiFi-Pineapple-Pager-Payloads/tree/main/theme-cfg-list-font) which changes files relating to the list picker font size to be smaller, can return back to default.  Theme needs to be reloaded after changing to apply.
 
 
 
