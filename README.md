@@ -1,8 +1,4 @@
-# BluePine
-
-![BluePine](images/bluepine-blue-poster.jpg)
-
-# Bluetooth Scanning Suite for the Hak5 WiFi Pineapple Pager
+![BluePine Bluetooth Scanning Suite for the Hak5 WiFi Pineapple Pager](images/bluepine-blue-poster.jpg)
 
 To install/run, copy the "bt-bluepine" folder with "include" subfolder to the folder of your choice on the pager in "/mmc/root/payloads/user/" and run "BluePine".
 
