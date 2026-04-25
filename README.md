@@ -32,12 +32,11 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 
 
 
-
 # Title: BluePine
 # Author: cncartist
-# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range and inability to change the built in MAC.
+# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.0
+# Version: 1.1
 # 
 # ============================================
 # Acknowledgements: 
@@ -55,13 +54,19 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 # ============================================
 # Includes: 
 # ============================================
-#  -- Bluetooth Device Hunter (Classic + LE combined or separate).
+#  -- Bluetooth Device Hunter (Classic + LE combined or separate):
 #  -- -- -- Hunt via Scanning All, Single MAC, OUI prefix, and/or Name.
 #  -- -- -- RSSI meter for each found signal, best signal showing at the bottom of the screen.
 #  -- -- -- Custom configuration allowed and data builds over time in case name or manufacturer is missed on first scans.
 #  -- -- -- Verbose logging / debugging available.
-#  -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / USB Kill / WiFi Pineapple BT Scanner.
+#  -- Bluetooth Device Detection: 
+#  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / USB Kill / WiFi Pineapple BT Scanner.
 #  -- -- -- Scan the airwaves, save targets, or scan your already saved target list from Device Hunter scans.
+#  -- Bluetooth Jammer Detector & Locator: 
+#  -- -- -- Detects & Locates Bluetooth Jammers/Interference Devices within close range.
+#  -- -- -- USB Bluetooth Adapter Required to utilize the connection between internal and external Bluetooth.
+#  -- -- -- The stronger the jammer/interference, the more easily it will be found.
+#  -- -- -- Even a weak jammer can cause signal outages in devices, but it takes a very strong interference or being very close (at most 4-6 ft away from source) to interrupt the connection between the internal Bluetooth and external USB Bluetooth.
 #  -- Target Probing:
 #  -- -- -- Required to set a Target before accessing the Probe menu.
 #  -- -- -- Set Target MAC, Hunt Target, Browse Services, Get Target Info, Get Target Vendor, Verify Target Connection.
@@ -82,9 +87,11 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 #  -- -- -- All Scanned MACs/Names are stored in "Targets List", these are cleared automatically & lost when the payload is closed.
 #  -- -- -- Saved MACs/Names that persist across app openings are stored in "Saved Targets List".
 #  -- -- -- You can add Scanned Targets to the "Saved Targets List" directly after a scan, or in the "Manage Saved Targets" menu option.
-#  -- Save / Load Saved Target List from file
+#  -- Save / Load Saved Target List from file:
 #  -- -- -- Saved Target List can be named for archiving, alphanumerical characters only.
-#  -- Configuration saving / tracking number of scans and malicious items found over time.
+#  -- Configuration saving / tracking number of scans and malicious items found over time:
+#  -- -- -- Configuration backed up to "savedconfig.json" on exit.
+#  -- -- -- If pager is updated/factory reset and config/history is wiped, configuration backup will restore settings.
 #  -- Privacy / Streamer Mode:
 #  -- -- -- (obscures MAC + Targets/Device Names) allows full functionality while obscuring ALL identifying information on screen, for both targets and self.
 #  -- Friendly Mode:
@@ -120,6 +127,11 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 #  -- -- -- The best way to get used to the sensitivity is to scan for known devices and locate them within close range to see the sensitivity received.
 #  -- -- -- There are many factors in Bluetooth sensitivity; walls & windows bounce or weaken signal, desks/objects can weaken signal, orientation of the pager can matter, and signals can look weak until you get closer to the actual source/Bluetooth chip on the target device. 
 #  -- -- -- Using an external USB CSR8510 / CSR v4.0 Bluetooth Adapter, you can achieve better sensitivity and range.
+#  -- Bluetooth Jammer Detector & Locator:
+#  -- -- -- "Jam" counter resets every 25 "nojams" to clean out errors, and the "Found" counter will only count true confirmed jams in the area.
+#  -- -- -- Confirmed jams are calculated at 5 jams per 25 scans.
+#  -- -- -- A sequential jam is accounted for and more severe, meaning you are closer to the jammer/interference device.
+#  -- -- -- This method may not work with certain Bluetooth dongles or setups and has only been confirmed to work with a USB CSR8510 / CSR v4.0 Bluetooth Adapter on the Pager.
 #  -- Bluetooth: 
 #  -- -- -- If you boot up the pager with USB bluetooth plugged in, it may reverse the hci addressing.
 #  -- -- -- -- - Please boot the pager WITHOUT a USB device connected for hci0 to be addressed as the first default device.
@@ -142,6 +154,17 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 #  -- -- -- -- - option_dialog_string.json  ( "max_chars": 38 )
 #  -- -- -- -- - option_dialog_string_selected.json  ( "max_chars": 40 )
 # 
+# ============================================
+#       LOGGING STRUCTURE / DATA FILES
+# ============================================
+# Main Loot Folder: "/root/loot/csec/bt-bluepine"
+# Detection Reports & Logs: "/root/loot/csec/bt-bluepine/detect"
+# Probe Reports & Logs: "/root/loot/csec/bt-bluepine/probe"
+# Scan Reports & Logs: "/root/loot/csec/bt-bluepine/scan"
+# Targets Data: "/root/loot/csec/bt-bluepine/targets"
+# 
+# Saved Targets File: "/root/loot/csec/bt-bluepine/targets/SavedTargets.txt"
+# Last Target File (MAC only): "/root/loot/csec/bt-bluepine/targets/LastTarget.txt"
 # ============================================
 #             SCAN LED STATUS
 # ============================================
