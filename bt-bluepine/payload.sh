@@ -1,9 +1,9 @@
 #!/bin/bash
 # Title: BluePine
 # Author: cncartist
-# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range and inability to change the built in MAC.
+# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.0
+# Version: 1.1
 # 
 # ============================================
 # Acknowledgements: 
@@ -21,13 +21,19 @@
 # ============================================
 # Includes: 
 # ============================================
-#  -- Bluetooth Device Hunter (Classic + LE combined or separate).
+#  -- Bluetooth Device Hunter (Classic + LE combined or separate):
 #  -- -- -- Hunt via Scanning All, Single MAC, OUI prefix, and/or Name.
 #  -- -- -- RSSI meter for each found signal, best signal showing at the bottom of the screen.
 #  -- -- -- Custom configuration allowed and data builds over time in case name or manufacturer is missed on first scans.
 #  -- -- -- Verbose logging / debugging available.
-#  -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / USB Kill / WiFi Pineapple BT Scanner.
+#  -- Bluetooth Device Detection: 
+#  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / USB Kill / WiFi Pineapple BT Scanner.
 #  -- -- -- Scan the airwaves, save targets, or scan your already saved target list from Device Hunter scans.
+#  -- Bluetooth Jammer Detector & Locator: 
+#  -- -- -- Detects & Locates Bluetooth Jammers/Interference Devices within close range.
+#  -- -- -- USB Bluetooth Adapter Required to utilize the connection between internal and external Bluetooth.
+#  -- -- -- The stronger the jammer/interference, the more easily it will be found.
+#  -- -- -- Even a weak jammer can cause signal outages in devices, but it takes a very strong interference or being very close (at most 4-6 ft away from source) to interrupt the connection between the internal Bluetooth and external USB Bluetooth.
 #  -- Target Probing:
 #  -- -- -- Required to set a Target before accessing the Probe menu.
 #  -- -- -- Set Target MAC, Hunt Target, Browse Services, Get Target Info, Get Target Vendor, Verify Target Connection.
@@ -48,9 +54,11 @@
 #  -- -- -- All Scanned MACs/Names are stored in "Targets List", these are cleared automatically & lost when the payload is closed.
 #  -- -- -- Saved MACs/Names that persist across app openings are stored in "Saved Targets List".
 #  -- -- -- You can add Scanned Targets to the "Saved Targets List" directly after a scan, or in the "Manage Saved Targets" menu option.
-#  -- Save / Load Saved Target List from file
+#  -- Save / Load Saved Target List from file:
 #  -- -- -- Saved Target List can be named for archiving, alphanumerical characters only.
-#  -- Configuration saving / tracking number of scans and malicious items found over time.
+#  -- Configuration saving / tracking number of scans and malicious items found over time:
+#  -- -- -- Configuration backed up to "savedconfig.json" on exit.
+#  -- -- -- If pager is updated/factory reset and config/history is wiped, configuration backup will restore settings.
 #  -- Privacy / Streamer Mode:
 #  -- -- -- (obscures MAC + Targets/Device Names) allows full functionality while obscuring ALL identifying information on screen, for both targets and self.
 #  -- Friendly Mode:
@@ -86,6 +94,11 @@
 #  -- -- -- The best way to get used to the sensitivity is to scan for known devices and locate them within close range to see the sensitivity received.
 #  -- -- -- There are many factors in Bluetooth sensitivity; walls & windows bounce or weaken signal, desks/objects can weaken signal, orientation of the pager can matter, and signals can look weak until you get closer to the actual source/Bluetooth chip on the target device. 
 #  -- -- -- Using an external USB CSR8510 / CSR v4.0 Bluetooth Adapter, you can achieve better sensitivity and range.
+#  -- Bluetooth Jammer Detector & Locator:
+#  -- -- -- "Jam" counter resets every 25 "nojams" to clean out errors, and the "Found" counter will only count true confirmed jams in the area.
+#  -- -- -- Confirmed jams are calculated at 5 jams per 25 scans.
+#  -- -- -- A sequential jam is accounted for and more severe, meaning you are closer to the jammer/interference device.
+#  -- -- -- This method may not work with certain Bluetooth dongles or setups and has only been confirmed to work with a USB CSR8510 / CSR v4.0 Bluetooth Adapter on the Pager.
 #  -- Bluetooth: 
 #  -- -- -- If you boot up the pager with USB bluetooth plugged in, it may reverse the hci addressing.
 #  -- -- -- -- - Please boot the pager WITHOUT a USB device connected for hci0 to be addressed as the first default device.
@@ -108,6 +121,17 @@
 #  -- -- -- -- - option_dialog_string.json  ( "max_chars": 38 )
 #  -- -- -- -- - option_dialog_string_selected.json  ( "max_chars": 40 )
 # 
+# ============================================
+#       LOGGING STRUCTURE / DATA FILES
+# ============================================
+# Main Loot Folder: "/root/loot/csec/bt-bluepine"
+# Detection Reports & Logs: "/root/loot/csec/bt-bluepine/detect"
+# Probe Reports & Logs: "/root/loot/csec/bt-bluepine/probe"
+# Scan Reports & Logs: "/root/loot/csec/bt-bluepine/scan"
+# Targets Data: "/root/loot/csec/bt-bluepine/targets"
+# 
+# Saved Targets File: "/root/loot/csec/bt-bluepine/targets/SavedTargets.txt"
+# Last Target File (MAC only): "/root/loot/csec/bt-bluepine/targets/LastTarget.txt"
 # ============================================
 #             SCAN LED STATUS
 # ============================================
@@ -150,12 +174,12 @@ source "./include/funcs_menu.sh"
 source "./include/funcs_scan.sh"
 
 # ---- CONFIG ----
-LOOT_BASE="/root/loot/csec/"; LOOT_DIR="${LOOT_BASE}bt-bluepine"
-LOOT_SCAN="${LOOT_DIR}/scan"; LOOT_DETECT="${LOOT_DIR}/detect"; LOOT_PROBE="${LOOT_DIR}/probe"; LOOT_TARGETS="${LOOT_DIR}/targets"
-mkdir -p "$LOOT_DIR"; mkdir -p "$LOOT_SCAN"; mkdir -p "$LOOT_DETECT"; mkdir -p "$LOOT_PROBE"; mkdir -p "$LOOT_TARGETS"
+LOOT_DIR="/root/loot/csec/bt-bluepine"; LOOT_SCAN="${LOOT_DIR}/scan"; LOOT_DETECT="${LOOT_DIR}/detect"; LOOT_PROBE="${LOOT_DIR}/probe"; LOOT_TARGETS="${LOOT_DIR}/targets"; LOOT_CONFIG="${LOOT_DIR}/config"
+mkdir -p "$LOOT_DIR"; mkdir -p "$LOOT_SCAN"; mkdir -p "$LOOT_DETECT"; mkdir -p "$LOOT_PROBE"; mkdir -p "$LOOT_TARGETS"; mkdir -p "$LOOT_CONFIG"
 TIMESTAMP=$(date +"%Y-%m-%d_%H%M%S")
 REPORT_FILE="$LOOT_SCAN/Report_${TIMESTAMP}.txt"
 REPORT_DETECT_FILE="$LOOT_DETECT/Report_${TIMESTAMP}.txt"
+REPORT_DETJAM_FILE="$LOOT_DETECT/Report_Jam_${TIMESTAMP}.txt"
 REPORT_PROBE_FILE="$LOOT_PROBE/Report_${TIMESTAMP}.txt"
 DATASTREAMBT_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBT.txt"
 DATASTREAMBT2_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBT2.txt"
@@ -163,9 +187,10 @@ DATASTREAMBT3_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBT3.txt"
 DATASTREAMBTTMP_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBTTMP.txt"
 DATASTREAMBTLE_FILE="$LOOT_DETECT/DataBTLE_${TIMESTAMP}.txt"
 DATASTREAMBTLETMP_FILE="$LOOT_DETECT/DataBTLETMP_${TIMESTAMP}.txt"
-KEYCKTMP_FILE="$LOOT_DIR/KeyCKTMP.txt"
-TARGETMAC_FILE="$LOOT_TARGETS/LastTarget.txt"
 SAVEDTARGETS_FILE="$LOOT_TARGETS/SavedTargets.txt"
+TARGETMAC_FILE="$LOOT_CONFIG/LastTarget.txt"
+SAVEDCONFIG_FILE="$LOOT_CONFIG/savedconfig.json"
+KEYCKTMP_FILE="$LOOT_DIR/KeyCKTMP.txt"
 
 # ---- DEFAULTS ----
 scan_default="false"
@@ -182,6 +207,7 @@ selnum=0
 selnum_main=1
 skip_ask_1st_scan=0
 select_target_go=0
+silent_backup=0
 detections=0
 lootreports=0
 hold_scan_btle=""
@@ -259,6 +285,8 @@ cleanup() {
 	btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
 	echo 1 > "$btn_a_path" 2>/dev/null
 	echo 1 > "$btn_b_path" 2>/dev/null
+	silent_backup=1
+	config_backup
     exit 0
 }
 trap cleanup EXIT SIGINT SIGTERM SIGHUP
@@ -322,43 +350,11 @@ skip_ask_1st_scan=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_1st_scan)
 [[ -z "$selnum_main" ]] && selnum_main=1
 [[ -z "$skip_ask_1st_scan" ]] && skip_ask_1st_scan=0
 
-# check values of settings
-if [[ "$DATA_SCAN_SECONDS" -gt 2 ]]; then
-	if [[ "$DATA_SCAN_SECONDS" -gt 20 ]]; then
-		DATA_SCAN_SECONDS=5
-	fi
-else
-	DATA_SCAN_SECONDS=5
-fi
-if [[ "$scan_btle" == "true" ]]; then scan_btle="true"; else scan_btle="false"; fi
-if [[ "$scan_btclassic" == "true" ]]; then scan_btclassic="true"; else scan_btclassic="false"; fi
-if [[ "$scan_infrepeat" -eq 1 ]]; then scan_infrepeat=1; else scan_infrepeat=0; fi
-if [[ "$scan_mute" == "true" ]]; then scan_mute="true"; else scan_mute="false"; fi
-if [[ "$scan_debug" == "true" ]] ; then scan_debug="true"; else scan_debug="false"; fi
-if [[ "$scan_friendly" -eq 0 ]]; then
-	text_hunt_UC="Hunt"
-	text_hunt_LC="hunt"
-	text_target_UC="Target"
-	text_target_LC="target"
-else
-	text_hunt_UC="Find"
-	text_hunt_LC="find"
-	text_target_UC="Device"
-	text_target_LC="device"
-fi
-if [[ "$scan_stealth" -eq 1 ]]; then
-	LED OFF
-	btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
-	btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
-	echo 0 > "$btn_a_path"
-	echo 0 > "$btn_b_path"
-else
-	LED MAGENTA
-	btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
-	btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
-	echo 1 > "$btn_a_path"
-	echo 1 > "$btn_b_path"
-fi
+# check config value versus found
+config_check
+# check settings
+settings_check
+
 # source "./include/funcs_extl.sh"
 # kill evtest if still running and rm old key file
 (killall evtest 2>/dev/null) &
@@ -495,9 +491,12 @@ while true; do
 			fi
 		done
 	elif [[ "$main_option" -eq 3 ]]; then
+		LOG "Jammer Detector...."
+		detect_jammers
+	elif [[ "$main_option" -eq 4 ]]; then
 		LOG "View ${text_target_UC}s / Select ${text_target_UC}...."
 		select_target
-	elif [[ "$main_option" -eq 4 ]]; then
+	elif [[ "$main_option" -eq 5 ]]; then
 		while true; do
 			LOG "Probe...."
 			sub_menu_probe
@@ -525,7 +524,7 @@ while true; do
 				sub_items_extl
 			fi
 		done 
-	elif [[ "$main_option" -eq 5 ]]; then
+	elif [[ "$main_option" -eq 6 ]]; then
 		LOG "${text_hunt_UC} Custom OUI/Name...."
 		enter_custom_oui
 		enter_custom_name
@@ -536,7 +535,7 @@ while true; do
 			LOG "Custom OUI/Name not set..."
 			LOG " "
 		fi
-	elif [[ "$main_option" -eq 6 ]]; then
+	elif [[ "$main_option" -eq 7 ]]; then
 		while true; do
 			saved_target_select=0
 			saved_target_remove=0
@@ -590,10 +589,10 @@ while true; do
 				LOG "Save ALL Scan ${text_target_UC}s...."
 				saved_targets_saveall
 			elif [[ "$submenu_option" -eq 7 ]]; then
-				LOG "Save/Load Saved ${text_target_UC}s File...."
+				LOG "Save / Load Saved ${text_target_UC}s File...."
 				saved_targets_saveload
 			elif [[ "$submenu_option" -eq 8 ]]; then
-				LOG "Rename/Remove Saved ${text_target_UC}...."
+				LOG "Rename / Remove Saved ${text_target_UC}...."
 				saved_target_rename=1
 				saved_target_remove=1
 				saved_targets_list
@@ -612,7 +611,7 @@ while true; do
 				saved_targets_clear
 			fi
 		done
-	elif [[ "$main_option" -eq 7 ]]; then
+	elif [[ "$main_option" -eq 8 ]]; then
 		while true; do
 			LOG "Preferences...."
 			sub_menu_preferences
@@ -694,6 +693,24 @@ while true; do
 				LOG "Stealth Mode / Disable LEDS...."
 				stealth_config
 			elif [[ "$submenu_option" -eq 6 ]]; then
+				LOG "Backup / Restore Config & History...."
+				resp=$(CONFIRMATION_DIALOG "Backup Config & History?")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					config_backup
+				else 
+					LOG "Backup Config & History skipped..."
+				fi
+				# check file has contents
+				if [[ -s "$SAVEDCONFIG_FILE" ]]; then
+					sleep 0.5
+					resp=$(CONFIRMATION_DIALOG "Restore Config & History?")
+					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+						config_restore
+					else 
+						LOG "Restore Config & History skipped..."
+					fi
+				fi
+			elif [[ "$submenu_option" -eq 7 ]]; then
 				LOG "Clear History / Data / Settings...."
 				resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL History / Scan Counts? ")
 				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
@@ -752,6 +769,7 @@ while true; do
 						scan_privacy=0
 						scan_friendly=0
 						scan_stealth=0
+						skip_ask_1st_scan=0
 						DATA_SCAN_SECONDS=5
 						custom_oui=""
 						custom_name=""
@@ -775,6 +793,7 @@ while true; do
 						PAYLOAD_SET_CONFIG bluepinesuite scan_privacy "$scan_privacy"
 						PAYLOAD_SET_CONFIG bluepinesuite scan_friendly "$scan_friendly"
 						PAYLOAD_SET_CONFIG bluepinesuite scan_stealth "$scan_stealth"
+						PAYLOAD_SET_CONFIG bluepinesuite skip_ask_1st_scan "$skip_ask_1st_scan"
 						PAYLOAD_SET_CONFIG bluepinesuite custom_oui "$custom_oui"
 						PAYLOAD_SET_CONFIG bluepinesuite custom_name "$custom_name"
 						LOG "Settings saved..."
@@ -813,7 +832,7 @@ while true; do
 						sleep 0.25
 					fi
 				fi
-			elif [[ "$submenu_option" -eq 7 ]]; then
+			elif [[ "$submenu_option" -eq 8 ]]; then
 				while true; do
 					LOG "Extra...."
 					sub_sub_menu_extra
@@ -837,7 +856,7 @@ while true; do
 				done
 			fi
 		done
-	elif [[ "$main_option" -eq 8 ]]; then
+	elif [[ "$main_option" -eq 9 ]]; then
 		LOG "Info...."
 		show_menu_end_OK=0
 		lootreports=$(find "$LOOT_SCAN" "$LOOT_DETECT" "$LOOT_PROBE" -maxdepth 1 -type f -name "Report*" -print | wc -l)
