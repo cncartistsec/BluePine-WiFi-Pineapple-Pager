@@ -1,7 +1,7 @@
 #!/bin/bash
 # Main Functions for BluePine
 # Author: cncartist
-# Version: 1.0
+# Version: 1.1
 # 
 # update_bluetooth_status
 # update_bluetooth_name
@@ -18,6 +18,12 @@
 # saved_target_remove_custom
 # saved_targets_archive
 # 
+# settings_check
+# config_check
+# config_read
+# config_backup
+# config_restore
+# 
 # start_evtest
 # check_cancel
 # target_mac_check
@@ -25,6 +31,7 @@
 # bt_browse_services
 # bt_get_info
 # bt_get_vendor
+# bt_verif_conn
 # 
 
 
@@ -1718,13 +1725,16 @@ saved_targets_saveload() {
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		sleep 1
 		# Find all Archive files
-		local files=($(find "$LOOT_TARGETS" -name "SavedTargets_*" 2>/dev/null))
+		local unsfiles=($(find "$LOOT_TARGETS" -name "SavedTargets_*" 2>/dev/null))
+		# sort file list
+		local files=($(printf '%s\0' "${unsfiles[@]}" | sort -n))
+		unset unsfiles
 
 		if [[ "${#files[@]}" -gt 0 ]] ; then
 			local LIST_STR=""
 			local count=1
 			for d in "${files[@]}"; do
-				# tell how many targets per file like handshake cracker airng
+				# tell how many targets per file
 				LIST_STR="${LIST_STR}${count}: $(basename ${d}) (${text_target_UC}s: $(grep -c '.' "${d}"))
 		"
 				count=$((count + 1))
@@ -1831,6 +1841,185 @@ saved_targets_saveload() {
 }
 
 
+# check settings
+settings_check() {
+	# check values of settings
+	if [[ "$DATA_SCAN_SECONDS" -gt 2 ]]; then
+		if [[ "$DATA_SCAN_SECONDS" -gt 20 ]]; then
+			DATA_SCAN_SECONDS=5
+		fi
+	else
+		DATA_SCAN_SECONDS=5
+	fi
+	if [[ "$scan_btle" == "true" ]]; then scan_btle="true"; else scan_btle="false"; fi
+	if [[ "$scan_btclassic" == "true" ]]; then scan_btclassic="true"; else scan_btclassic="false"; fi
+	if [[ "$scan_infrepeat" -eq 1 ]]; then scan_infrepeat=1; else scan_infrepeat=0; fi
+	if [[ "$scan_mute" == "true" ]]; then scan_mute="true"; else scan_mute="false"; fi
+	if [[ "$scan_debug" == "true" ]] ; then scan_debug="true"; else scan_debug="false"; fi
+	if [[ "$skip_ask_1st_scan" -eq 1 ]]; then skip_ask_1st_scan=1; else skip_ask_1st_scan=0; fi
+	if [[ "$scan_friendly" -eq 0 ]]; then
+		text_hunt_UC="Hunt"
+		text_hunt_LC="hunt"
+		text_target_UC="Target"
+		text_target_LC="target"
+	else
+		text_hunt_UC="Find"
+		text_hunt_LC="find"
+		text_target_UC="Device"
+		text_target_LC="device"
+	fi
+	btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+	btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+	if [[ "$scan_stealth" -eq 1 ]]; then
+		LED OFF
+		echo 0 > "$btn_a_path"
+		echo 0 > "$btn_b_path"
+	else
+		LED MAGENTA
+		echo 1 > "$btn_a_path"
+		echo 1 > "$btn_b_path"
+	fi
+}
+
+# configuration check to see if no config set but config avail
+config_check() {
+	# LOG "config_check"
+	local re='^[0-9]+$'
+	local total_scans_check=0
+	# check if file is not empty this time around
+	if [[ -s "$SAVEDCONFIG_FILE" ]]; then
+		line=$(jq -r '.total_scans' "$SAVEDCONFIG_FILE") # check if num
+		# echo "total_scans" # check if num
+		if [[ "$line" =~ $re ]] ; then total_scans_check="$line"; fi
+		
+		# check if cfg set but data not presently loaded
+		if [[ "$total_scans" -eq 0 && "$total_scans_check" -gt 0 ]] ; then
+			# found data mismatch, ask if user wants to restore previous settings/statistics?
+			# resp=$(CONFIRMATION_DIALOG "Config/History Backup Exists, but not loaded or recent firmware update has cleared all saved Configuration & History data! Confirm Load of Previous Config/History?")
+			# if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+				silent_backup=1
+				config_restore
+				silent_backup=0
+			# else LOG "Configuration Restore skipped..."; fi
+		fi
+	fi
+}
+
+# configuration reader
+config_read() {
+	local line=""; local lineCk=""; local re='^[0-9]+$'
+	line=$(jq -r '.DATA_SCAN_SECONDS' "$SAVEDCONFIG_FILE") # check if num
+	if [[ "$line" =~ $re ]] ; then DATA_SCAN_SECONDS="$line"; else DATA_SCAN_SECONDS=5; fi
+	line=$(jq -r '.scan_btle' "$SAVEDCONFIG_FILE") # check if true
+	if [[ "$line" == "true" ]]; then scan_btle="true"; else scan_btle="false"; fi
+	line=$(jq -r '.scan_btclassic' "$SAVEDCONFIG_FILE") # check if true
+	if [[ "$line" == "true" ]]; then scan_btclassic="true"; else scan_btclassic="false"; fi
+	line=$(jq -r '.scan_infrepeat' "$SAVEDCONFIG_FILE")
+	if [[ "$line" -eq 1 ]] ; then scan_infrepeat=1; else scan_infrepeat=0; fi
+	
+	line=$(jq -r '.scan_mute' "$SAVEDCONFIG_FILE") # check if true
+	if [[ "$line" == "true" ]]; then scan_mute="true"; else scan_mute="false"; fi
+	line=$(jq -r '.scan_debug' "$SAVEDCONFIG_FILE") # check if true
+	if [[ "$line" == "true" ]]; then scan_debug="true"; else scan_debug="false"; fi
+	line=$(jq -r '.scan_privacy' "$SAVEDCONFIG_FILE")
+	if [[ "$line" -eq 1 ]] ; then scan_privacy=1; else scan_privacy=0; fi
+	line=$(jq -r '.scan_friendly' "$SAVEDCONFIG_FILE")
+	if [[ "$line" -eq 1 ]] ; then scan_friendly=1; else scan_friendly=0; fi
+	
+	line=$(jq -r '.scan_stealth' "$SAVEDCONFIG_FILE")
+	if [[ "$line" -eq 1 ]] ; then scan_stealth=1; else scan_stealth=0; fi	
+	line=$(jq -r '.skip_ask_1st_scan' "$SAVEDCONFIG_FILE")
+	if [[ "$line" -eq 1 ]] ; then skip_ask_1st_scan=1; else skip_ask_1st_scan=0; fi	
+	line=$(jq -r '.total_scans' "$SAVEDCONFIG_FILE") # check if num
+	if [[ "$line" =~ $re ]] ; then total_scans="$line"; else total_scans=0; fi	
+	line=$(jq -r '.total_detected' "$SAVEDCONFIG_FILE") # check if num
+	if [[ "$line" =~ $re ]] ; then total_detected="$line"; else total_detected=0; fi
+	
+	line=$(jq -r '.custom_oui' "$SAVEDCONFIG_FILE") # check oui format
+	lineCk="${line}:00:00:00"
+	if [[ "$lineCk" =~ $VALID_MAC ]]; then custom_oui="$line"; else custom_oui=""; fi	
+	line=$(jq -r '.custom_name' "$SAVEDCONFIG_FILE")
+	custom_name="$line"
+}
+
+# configuration backup
+config_backup() {
+	# LOG "config_backup"
+	local confirmFile=0
+	if [[ "$silent_backup" -eq 0 ]] ; then
+		# check if file is not empty this time around
+		if [[ -s "$SAVEDCONFIG_FILE" ]]; then
+			# file exists, has contents, confirm overwrite
+			resp=$(CONFIRMATION_DIALOG "Config Backup Exists!
+			
+			Confirm Overwrite?")
+			if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+				confirmFile=1
+			else
+				LOG "Configuration Backup skipped..."
+			fi
+		else
+			confirmFile=1 # file empty, proceed to create
+		fi
+	else confirmFile=1; fi
+	if [[ "$confirmFile" -eq 1 ]]; then
+		if [[ "$silent_backup" -eq 0 ]] ; then LOG "Configuration Backup started..."; fi
+		# Create JSON file using jq
+		jq -n \
+		  --argjson val_DATA_SCAN_SECONDS "$DATA_SCAN_SECONDS" \
+		  --arg val_scan_btle "$scan_btle" \
+		  --arg val_scan_btclassic "$scan_btclassic" \
+		  --argjson val_scan_infrepeat "$scan_infrepeat" \
+		  --arg val_scan_mute "$scan_mute" \
+		  --arg val_scan_debug "$scan_debug" \
+		  --argjson val_scan_privacy "$scan_privacy" \
+		  --argjson val_scan_friendly "$scan_friendly" \
+		  --argjson val_scan_stealth "$scan_stealth" \
+		  --argjson val_skip_ask_1st_scan "$skip_ask_1st_scan" \
+		  --argjson val_total_scans "$total_scans" \
+		  --argjson val_total_detected "$total_detected" \
+		  --arg val_custom_oui "$custom_oui" \
+		  --arg val_custom_name "$custom_name" \
+		  '{DATA_SCAN_SECONDS: $val_DATA_SCAN_SECONDS, scan_btle: $val_scan_btle, scan_btclassic: $val_scan_btclassic, scan_infrepeat: $val_scan_infrepeat, scan_mute: $val_scan_mute, scan_debug: $val_scan_debug, scan_privacy: $val_scan_privacy, scan_friendly: $val_scan_friendly, scan_stealth: $val_scan_stealth, skip_ask_1st_scan: $val_skip_ask_1st_scan, total_scans: $val_total_scans, total_detected: $val_total_detected, custom_oui: $val_custom_oui, custom_name: $val_custom_name}' > "$SAVEDCONFIG_FILE"
+		if [[ "$silent_backup" -eq 0 ]] ; then LOG green "Configuration Backup complete!"; fi
+	fi
+	if [[ "$silent_backup" -eq 0 ]] ; then LOG " "; fi
+}
+
+# configuration restore
+config_restore() {
+	# LOG "config_restore"
+	# check if file is not empty this time around
+	if [[ -s "$SAVEDCONFIG_FILE" ]]; then
+		if [[ "$silent_backup" -eq 0 ]] ; then LOG "Reading Configuration..."; fi
+		config_read
+		if [[ "$silent_backup" -eq 0 ]] ; then LOG "Restoring Configuration..."; fi
+		# restore config
+		PAYLOAD_SET_CONFIG bluepinesuite DATA_SCAN_SECONDS "$DATA_SCAN_SECONDS"
+		PAYLOAD_SET_CONFIG bluepinesuite scan_btle "$scan_btle"
+		PAYLOAD_SET_CONFIG bluepinesuite scan_btclassic "$scan_btclassic"
+		PAYLOAD_SET_CONFIG bluepinesuite scan_infrepeat "$scan_infrepeat"
+		
+		PAYLOAD_SET_CONFIG bluepinesuite scan_mute "$scan_mute"
+		PAYLOAD_SET_CONFIG bluepinesuite scan_debug "$scan_debug"
+		PAYLOAD_SET_CONFIG bluepinesuite scan_privacy "$scan_privacy"
+		PAYLOAD_SET_CONFIG bluepinesuite scan_friendly "$scan_friendly"
+		
+		PAYLOAD_SET_CONFIG bluepinesuite scan_stealth "$scan_stealth"
+		PAYLOAD_SET_CONFIG bluepinesuite skip_ask_1st_scan "$skip_ask_1st_scan"
+		PAYLOAD_SET_CONFIG bluepinesuite total_scans "$total_scans"
+		PAYLOAD_SET_CONFIG bluepinesuite total_detected "$total_detected"
+		
+		PAYLOAD_SET_CONFIG bluepinesuite custom_oui "$custom_oui"
+		PAYLOAD_SET_CONFIG bluepinesuite custom_name "$custom_name"
+		# check settings
+		settings_check
+		if [[ "$silent_backup" -eq 0 ]] ; then LOG green "Configuration Backup restored!"; fi
+	else
+		LOG red "ERROR: Configuration Backup missing!"
+	fi
+	if [[ "$silent_backup" -eq 0 ]] ; then LOG " "; fi
+}
 
 
 # start key check collection
@@ -1839,7 +2028,10 @@ start_evtest() {
 	# LOG "start evtest"
 	# timeout not working on evtest?
 	# (timeout --signal=SIGINT 999s evtest /dev/input/event0 | grep "^Event:" &> "$KEYCKTMP_FILE") &
-	(evtest /dev/input/event0 | grep "^Event:" &> "$KEYCKTMP_FILE") &
+	# (evtest /dev/input/event0 | grep "^Event:" &> "$KEYCKTMP_FILE") &
+	
+	# wrap the command in a second subshell and redirect its output to hide job ID and PID
+	((evtest /dev/input/event0 | grep "^Event:" &> "$KEYCKTMP_FILE") &) > /dev/null 2>&1
 }
 # check pause/cancel
 check_cancel() {
@@ -1853,14 +2045,14 @@ check_cancel() {
 		# LOG "found"
 		killall evtest 2>/dev/null
 		# empty file
-		:> $KEYCKTMP_FILE
+		:> "$KEYCKTMP_FILE"
 		cancel_press=1
 		# if cancel_press=1 then prompt asking if they actually want to cancel.
-		LOG " "
+		LOG blue "================================================="
 		LOG "Pausing..."
 		LOG "Pausing..."
 		LOG "Pausing..."
-		LOG " "
+		LOG blue "================================================="
 		sleep 4
 		# Confirm Cancel
 		resp=$(CONFIRMATION_DIALOG "PAUSED! Cancel further scanning?")
@@ -1880,7 +2072,7 @@ check_cancel() {
 	else
 		# LOG "not found, empty file"
 		# empty file
-		:> $KEYCKTMP_FILE
+		:> "$KEYCKTMP_FILE"
 	fi
 }
 
