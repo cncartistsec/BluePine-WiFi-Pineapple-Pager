@@ -1,7 +1,7 @@
 #!/bin/bash
 # Menu Functions for BluePine
 # Author: cncartist
-# Version: 1.0
+# Version: 1.1
 # 
 # check_dependencies
 # check_ringtones
@@ -231,11 +231,15 @@ external_bt_check() {
 					if ! hciconfig "$BLE_IFACE" up 2>/dev/null; then
 						sleep 0.5
 						# LOG red "Interface DOWN!: $BLE_IFACE"
+						# LOG red "Resetting"
+						hciconfig "$BLE_IFACE" reset 2>/dev/null
+						sleep 1.5
 						# LOG red "Trying to bring back up..."
-						hciconfig "$BLE_IFACE" up
+						hciconfig "$BLE_IFACE" up 2>/dev/null
 						sleep 0.5
 						if [[ "$loop" -eq 5 ]] ; then
 							LOG red   "== ERROR: Interface DOWN after $loop tries!: $BLE_IFACE ==="
+							BLE_IFACE="hci0"
 							break
 						fi
 					else
@@ -262,7 +266,7 @@ external_bt_check() {
 				LOG magenta "Have CSR BT but booted Pager with USB plugged in?"
 				LOG " "
 				LOG cyan "If so, please reboot the Pager without USB BT."
-				LOG cyan "Then plugin USB BT after boot..."
+				LOG cyan "Then Plugin USB BT after boot..."
 				LOG blue  "================================================="
 				LOG "Press OK to continue..."
 				LOG " "
@@ -498,44 +502,33 @@ friendly_config() {
 	resp=$(CONFIRMATION_DIALOG "Friendly Mode?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		scan_friendly=1
-		text_hunt_UC="Find"
-		text_hunt_LC="find"
-		text_target_UC="Device"
-		text_target_LC="device"
 		LOG "Friendly Mode Enabled..."
 	else
 		scan_friendly=0
-		text_hunt_UC="Hunt"
-		text_hunt_LC="hunt"
-		text_target_UC="Target"
-		text_target_LC="target"
 		LOG "Friendly Mode Disabled..."
 	fi
 	PAYLOAD_SET_CONFIG bluepinesuite scan_friendly "$scan_friendly"
+	settings_check
 	LOG " "
 }
 stealth_config() {
 	resp=$(CONFIRMATION_DIALOG "Stealth Mode?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-		LOG "Stealth Mode Enabled..."
 		scan_mute="true"
-		LOG "Sound Effects Off..."
 		scan_stealth=1
+		settings_check
+		LOG "Stealth Mode Enabled..."
+		LOG "Sound Effects Off..."
 		LOG "LEDS Turned Off..."
-		LED OFF
-		btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
-		btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
-		echo 0 > "$btn_a_path"
-		echo 0 > "$btn_b_path"
 		LOG "A + B Button LEDS Turned Off..."
 		LOG "Payload LED Actions Disabled..."
 	else
-		LOG "Stealth Mode Disabled..."
 		scan_mute="false"
-		LOG "Sound Effects On..."
 		scan_stealth=0
-		LOG "LEDS Turned On..."
 		LED MAGENTA
+		LOG "Stealth Mode Disabled..."
+		LOG "Sound Effects On..."
+		LOG "LEDS Turned On..."
 		btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
 		btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
 		btn_a_state=$(cat "$btn_a_path")
@@ -684,12 +677,13 @@ main_menu() {
 	MENU_ITEMS[0]="Exit"
 	MENU_ITEMS[1]="Scan"
 	MENU_ITEMS[2]="Detection"
-	MENU_ITEMS[3]="View ${text_target_UC}s / Select ${text_target_UC}"
-	MENU_ITEMS[4]="Probe ${text_target_UC}"
-	MENU_ITEMS[5]="${text_hunt_UC} Custom OUI/Name"
-	MENU_ITEMS[6]="Manage Saved ${text_target_UC}s"
-	MENU_ITEMS[7]="Preferences"
-	MENU_ITEMS[8]="Info"
+	MENU_ITEMS[3]="Jammer Detector"
+	MENU_ITEMS[4]="View ${text_target_UC}s / Select ${text_target_UC}"
+	MENU_ITEMS[5]="Probe ${text_target_UC}"
+	MENU_ITEMS[6]="${text_hunt_UC} Custom OUI/Name"
+	MENU_ITEMS[7]="Manage Saved ${text_target_UC}s"
+	MENU_ITEMS[8]="Preferences"
+	MENU_ITEMS[9]="Info"
 	local maxarritems=$(( ${#MENU_ITEMS[@]} - 1 ))
 	local defaultselnum="$selnum_main"
 	local text_pick_str="\"Main Menu\""
@@ -719,7 +713,7 @@ main_menu() {
 	LOG magenta "================================== Main Menu ===="
 	LOG "0: Exit BluePine"
 	LOG green "Press OK..."
-	LOG " "
+	# LOG " "
 	WAIT_FOR_BUTTON_PRESS A
 	sleep 0.5
 	# can anyone recommend me a better way to do this than eval?
@@ -733,6 +727,7 @@ main_menu() {
 		"${MENU_ITEMS[6]}") selnum=6 ;;
 		"${MENU_ITEMS[7]}") selnum=7 ;;
 		"${MENU_ITEMS[8]}") selnum=8 ;;
+		"${MENU_ITEMS[9]}") selnum=9 ;;
 		"${MENU_ITEMS[0]}") selnum=0 ;;
 		*)
 		selnum=0 # LOG "Cancel pressed or unknown"
@@ -748,7 +743,7 @@ main_menu() {
 			bluepinelogo
 			LOG cyan   "░░░░░░░░░░░░ Thank you for playing! ░░░░░░░░░░░░░░"
 			LOG blue   "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
-			LOG " "
+			# cleanup
 			LOG "Exiting..."
 			exit 0
 		fi
@@ -756,6 +751,7 @@ main_menu() {
 		# save config
 		selnum_main="$selnum"
 		PAYLOAD_SET_CONFIG bluepinesuite selnum_main "$selnum_main"
+		LOG " "
 	fi
 	# LOG green "Press OK to continue..."; LOG " "; WAIT_FOR_BUTTON_PRESS A
 }
@@ -898,8 +894,8 @@ sub_menu_savedtargoptions() {
 	MENU_ITEMS[4]="Clear Current ${text_target_UC}"
 	MENU_ITEMS[5]="Select from Saved ${text_target_UC}s"
 	MENU_ITEMS[6]="Save ALL Scan ${text_target_UC}s"
-	MENU_ITEMS[7]="Save/Load Saved ${text_target_UC}s File"
-	MENU_ITEMS[8]="Rename/Remove Saved ${text_target_UC}"
+	MENU_ITEMS[7]="Save / Load Saved ${text_target_UC}s File"
+	MENU_ITEMS[8]="Rename / Remove Saved ${text_target_UC}"
 	MENU_ITEMS[9]="Remove Saved ${text_target_UC}s by Custom OUI/Name"
 	MENU_ITEMS[10]="Clear Saved ${text_target_UC}s"
 	local maxarritems=$(( ${#MENU_ITEMS[@]} - 1 ))
@@ -967,8 +963,9 @@ sub_menu_preferences() {
 	MENU_ITEMS[3]="Sound"
 	MENU_ITEMS[4]="Debug Mode"
 	MENU_ITEMS[5]="Stealth Mode / Disable LEDS"
-	MENU_ITEMS[6]="Clear History / Data / Settings"
-	MENU_ITEMS[7]="Extra"
+	MENU_ITEMS[6]="Backup / Restore Config & History"
+	MENU_ITEMS[7]="Clear History / Data / Settings"
+	MENU_ITEMS[8]="Extra"
 	
 	local maxarritems=$(( ${#MENU_ITEMS[@]} - 1 ))
 	local defaultselnum=1
@@ -1005,6 +1002,7 @@ sub_menu_preferences() {
 		"${MENU_ITEMS[5]}") selnum=5 ;;
 		"${MENU_ITEMS[6]}") selnum=6 ;;
 		"${MENU_ITEMS[7]}") selnum=7 ;;
+		"${MENU_ITEMS[8]}") selnum=8 ;;
 		"${MENU_ITEMS[0]}") selnum=0 ;;
 		*)
 		selnum=0 # LOG "Cancel pressed or unknown"
