@@ -230,6 +230,10 @@ scan_BT_PINEAPPS="false"
 savedTargWarn=1000
 savedTargCrit=3000
 gpspos_last=""
+text_hunt_UC="Find"
+text_hunt_LC="find"
+text_target_UC="Device"
+text_target_LC="device"
 # ---- DEFAULTS ----
 # ---- DEFAULTS SAVED CFG ----
 total_scans=0
