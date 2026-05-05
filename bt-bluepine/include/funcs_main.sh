@@ -34,7 +34,6 @@
 # bt_verif_conn
 # 
 
-
 # change BT status
 update_bluetooth_status(){
 	# devicecurrnt="hci0"
@@ -940,7 +939,7 @@ saved_targets_saveall() {
 				if grep -q "$mac" "$SAVEDTARGETS_FILE"; then
 					# echo "The string variable exists in the file."
 					# only add if new name known, otherwise leave unchanged
-					if [[ "$NEW_TARGET_MAC_NAME" != "Unknown" ]] ;
+					if [[ "$NEW_TARGET_MAC_NAME" != "Unknown" ]] ; then
 						# remove lines that have mac first
 						sed -i "/$mac/d" "$SAVEDTARGETS_FILE"
 						printf "%s %s\n" "${mac}" "${NEW_TARGET_MAC_NAME}" >> "$SAVEDTARGETS_FILE"
@@ -1504,7 +1503,6 @@ select_target() {
 		fi
 	fi
 }
-
 
 # Remove Saved Targets by Custom OUI/Name
 saved_target_remove_custom() {
