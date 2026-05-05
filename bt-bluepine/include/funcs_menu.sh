@@ -204,6 +204,12 @@ check_ringtones() {
 			LOG green "Sound Effects / Ringtones Copied!"
 		else
 			LOG magenta "Skipped Copying Sound Effects / Ringtones..."
+			resp=$(CONFIRMATION_DIALOG "Do you want to skip this Ringtone Check from now on?")
+			if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+				LOG "Skipping Ringtone Check from now on..."
+				skip_ask_ringtones=1
+				PAYLOAD_SET_CONFIG bluepinesuite skip_ask_ringtones "$skip_ask_ringtones"
+			fi
 		fi
 	fi
 }
@@ -737,10 +743,8 @@ main_menu() {
 	if [[ "$selnum" -eq 0 ]]; then
 		resp=$(CONFIRMATION_DIALOG "Are you sure you want to quit?")
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-			# LOG " "
+			LOG " "
 			LOG blue   "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
-			LOG cyan   "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
-			bluepinelogo
 			LOG cyan   "░░░░░░░░░░░░ Thank you for playing! ░░░░░░░░░░░░░░"
 			LOG blue   "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
 			# cleanup
