@@ -834,7 +834,7 @@ saved_targets_savecurrent() {
 	# check if target is set
 	if [[ -n "$target_mac" ]]; then
 		if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$target_mac"; target_mac="${target_mac:0:2}:░░:░░:░░:░░:░░"; fi
-		resp=$(CONFIRMATION_DIALOG "Confirm adding Selected ${text_target_UC} ${target_mac} to Saved ${text_target_UC} List? ")
+		resp=$(CONFIRMATION_DIALOG "Confirm adding Selected ${text_target_UC} ${target_mac} to Saved ${text_target_UC}s List? ")
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 			LOG green "========= Selected ${text_target_UC}: $target_mac ===="
 			LOG "Add ${text_target_UC}: $target_mac to Saved ${text_target_UC}s..."
@@ -912,7 +912,7 @@ saved_targets_saveall() {
 	else
 		resp=$(CONFIRMATION_DIALOG "Are you sure you want to ADD ALL Scan ${text_target_UC}s to Saved ${text_target_UC}s List? ")
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-			LOG "Adding all Scan ${text_target_UC}s to Saved ${text_target_UC} List..."
+			LOG "Adding all Scan ${text_target_UC}s to Saved ${text_target_UC}s List..."
 			for mac in "${!BT_TARGETS[@]}"; do
 				targetlist_name="${BT_NAMES[$mac]}"
 				if [[ -z "$targetlist_name" ]] ; then
@@ -1817,9 +1817,8 @@ saved_targets_saveload() {
 					LOG magenta "Previous ${text_target_UC} Count: ${#BT_TARGETS_SAVED[@]}"
 					LOG green "New ${text_target_UC} Count: $(grep -c '.' "${SELECTED_FILE}")"
 					LOG blue "============================== ${text_target_UC} Counts ===="
-					LOG "Press OK to load New ${text_target_UC}s..."
+					LOG "Loading New ${text_target_UC}s..."
 					LOG blue "================================================="
-					WAIT_FOR_BUTTON_PRESS A
 					sleep 0.5
 					saved_targets_check
 				else
@@ -1857,6 +1856,7 @@ settings_check() {
 	if [[ "$scan_mute" == "true" ]]; then scan_mute="true"; else scan_mute="false"; fi
 	if [[ "$scan_debug" == "true" ]] ; then scan_debug="true"; else scan_debug="false"; fi
 	if [[ "$skip_ask_1st_scan" -eq 1 ]]; then skip_ask_1st_scan=1; else skip_ask_1st_scan=0; fi
+	if [[ "$skip_ask_ringtones" -eq 1 ]]; then skip_ask_ringtones=1; else skip_ask_ringtones=0; fi
 	if [[ "$scan_friendly" -eq 0 ]]; then
 		text_hunt_UC="Hunt"
 		text_hunt_LC="hunt"
@@ -1927,17 +1927,19 @@ config_read() {
 	if [[ "$line" -eq 1 ]] ; then scan_friendly=1; else scan_friendly=0; fi
 	
 	line=$(jq -r '.scan_stealth' "$SAVEDCONFIG_FILE")
-	if [[ "$line" -eq 1 ]] ; then scan_stealth=1; else scan_stealth=0; fi	
+	if [[ "$line" -eq 1 ]] ; then scan_stealth=1; else scan_stealth=0; fi
 	line=$(jq -r '.skip_ask_1st_scan' "$SAVEDCONFIG_FILE")
-	if [[ "$line" -eq 1 ]] ; then skip_ask_1st_scan=1; else skip_ask_1st_scan=0; fi	
+	if [[ "$line" -eq 1 ]] ; then skip_ask_1st_scan=1; else skip_ask_1st_scan=0; fi
+	line=$(jq -r '.skip_ask_ringtones' "$SAVEDCONFIG_FILE")
+	if [[ "$line" -eq 1 ]] ; then skip_ask_ringtones=1; else skip_ask_ringtones=0; fi	
 	line=$(jq -r '.total_scans' "$SAVEDCONFIG_FILE") # check if num
-	if [[ "$line" =~ $re ]] ; then total_scans="$line"; else total_scans=0; fi	
+	if [[ "$line" =~ $re ]] ; then total_scans="$line"; else total_scans=0; fi
 	line=$(jq -r '.total_detected' "$SAVEDCONFIG_FILE") # check if num
 	if [[ "$line" =~ $re ]] ; then total_detected="$line"; else total_detected=0; fi
 	
 	line=$(jq -r '.custom_oui' "$SAVEDCONFIG_FILE") # check oui format
 	lineCk="${line}:00:00:00"
-	if [[ "$lineCk" =~ $VALID_MAC ]]; then custom_oui="$line"; else custom_oui=""; fi	
+	if [[ "$lineCk" =~ $VALID_MAC ]]; then custom_oui="$line"; else custom_oui=""; fi
 	line=$(jq -r '.custom_name' "$SAVEDCONFIG_FILE")
 	custom_name="$line"
 }
@@ -1976,11 +1978,12 @@ config_backup() {
 		  --argjson val_scan_friendly "$scan_friendly" \
 		  --argjson val_scan_stealth "$scan_stealth" \
 		  --argjson val_skip_ask_1st_scan "$skip_ask_1st_scan" \
+		  --argjson val_skip_ask_ringtones "$skip_ask_ringtones" \
 		  --argjson val_total_scans "$total_scans" \
 		  --argjson val_total_detected "$total_detected" \
 		  --arg val_custom_oui "$custom_oui" \
 		  --arg val_custom_name "$custom_name" \
-		  '{DATA_SCAN_SECONDS: $val_DATA_SCAN_SECONDS, scan_btle: $val_scan_btle, scan_btclassic: $val_scan_btclassic, scan_infrepeat: $val_scan_infrepeat, scan_mute: $val_scan_mute, scan_debug: $val_scan_debug, scan_privacy: $val_scan_privacy, scan_friendly: $val_scan_friendly, scan_stealth: $val_scan_stealth, skip_ask_1st_scan: $val_skip_ask_1st_scan, total_scans: $val_total_scans, total_detected: $val_total_detected, custom_oui: $val_custom_oui, custom_name: $val_custom_name}' > "$SAVEDCONFIG_FILE"
+		  '{DATA_SCAN_SECONDS: $val_DATA_SCAN_SECONDS, scan_btle: $val_scan_btle, scan_btclassic: $val_scan_btclassic, scan_infrepeat: $val_scan_infrepeat, scan_mute: $val_scan_mute, scan_debug: $val_scan_debug, scan_privacy: $val_scan_privacy, scan_friendly: $val_scan_friendly, scan_stealth: $val_scan_stealth, skip_ask_1st_scan: $val_skip_ask_1st_scan, skip_ask_ringtones: $val_skip_ask_ringtones, total_scans: $val_total_scans, total_detected: $val_total_detected, custom_oui: $val_custom_oui, custom_name: $val_custom_name}' > "$SAVEDCONFIG_FILE"
 		if [[ "$silent_backup" -eq 0 ]] ; then LOG green "Configuration Backup complete!"; fi
 	fi
 	if [[ "$silent_backup" -eq 0 ]] ; then LOG " "; fi
@@ -2007,6 +2010,7 @@ config_restore() {
 		
 		PAYLOAD_SET_CONFIG bluepinesuite scan_stealth "$scan_stealth"
 		PAYLOAD_SET_CONFIG bluepinesuite skip_ask_1st_scan "$skip_ask_1st_scan"
+		PAYLOAD_SET_CONFIG bluepinesuite skip_ask_ringtones "$skip_ask_ringtones"
 		PAYLOAD_SET_CONFIG bluepinesuite total_scans "$total_scans"
 		PAYLOAD_SET_CONFIG bluepinesuite total_detected "$total_detected"
 		
