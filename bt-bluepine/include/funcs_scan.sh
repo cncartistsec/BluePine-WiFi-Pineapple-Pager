@@ -6,6 +6,7 @@
 # reset_bt_adapter
 # rssitxtsw_hci0
 # rssitxtsw_hci1
+# reset_gpsd
 # 
 # device_hunter
 # detect_bt_classic
@@ -170,9 +171,17 @@ rssitxtsw_hci1() {
 }
 
 
+# Reset GPSD in case stale data persists
+reset_gpsd() {
+	/etc/init.d/gpsd reload 2>/dev/null
+	/etc/init.d/gpsd restart 2>/dev/null
+}
+
 
 # device hunter function
 device_hunter() {
+	reset_gpsd
+	
 	resp=$(CONFIRMATION_DIALOG "Modify current scan settings?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]]; then
 		scantime_config
@@ -180,7 +189,7 @@ device_hunter() {
 	fi
 	
 	resp=$(CONFIRMATION_DIALOG "Confirm scan for ${text_target_LC}(s)?")
-	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]]; then
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]]; then	
 		local scannumber=0
 		local founditems=0
 		local select_target_seen=0
@@ -195,8 +204,11 @@ device_hunter() {
 		local pattern4="RSSI:"
 		local pattern5="Name \(complete\):"
 		local SEARCH_STRING=""
+		local gps_disptxt=""
 		
+		# set on each total run
 		cancel_app=0
+		gpspos_last=""
 
 		rm "$DATASTREAMBT_FILE" 2>/dev/null
 		rm "$DATASTREAMBT2_FILE" 2>/dev/null
@@ -290,16 +302,26 @@ device_hunter() {
 			LOG "Scanning... Press BACK to stop."
 		fi
 		
+		# first check to set header
+		gpspos_cur=$(GPS_GET)
+		if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+			gpspos_last="$gpspos_cur"; gps_disptxt=' +GPS+' # GPS is valid
+		else
+			if [[ -n "$gpspos_last" ]] ; then
+				gps_disptxt=' NoGPS' # gps lost, last known coordinates: gpspos_last
+			fi
+		fi
+		
 		LOG blue "-------------------------------------------"
-		LOG cyan "|- Signal -| -- MAC Address -- - Name/Manuf"
+		LOG cyan "|- Signal -| -- MAC Address -- - Name/Manuf${gps_disptxt}"
 		LOG blue "-------------------------------------------"
 		
 		# start key check collection
 		if [[ "$scan_infrepeat" -eq 1 ]] ; then start_evtest; fi
 		
+		
 		while true; do
 		
-			
 			scannumber=$((scannumber + 1))
 			reset_bt_adapter
 			
@@ -320,6 +342,21 @@ device_hunter() {
 			
 			printf "════════════════════════════════════════════\n" >> "$REPORT_FILE"
 			printf "%s - EVENT: Start scan #%s\n" "$(date +"%Y-%m-%d_%H%M%S")" "${scannumber}" >> "$REPORT_FILE"
+			
+			# set on each run
+			gps_disptxt=""; gpspos_cur=$(GPS_GET)
+			if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+				# GPS is valid
+				gpspos_last="$gpspos_cur"; gps_disptxt=' +GPS+'
+				printf "GPS Pos.: %s\n" "${gpspos_last}" >> "$REPORT_FILE"
+			else
+				if [[ -n "$gpspos_last" ]] ; then
+					# gps lost, last known coordinates: gpspos_last
+					gps_disptxt=' NoGPS'
+					printf "GPS LOST! %s (Last Known Pos.)\n" "${gpspos_last}" >> "$REPORT_FILE"
+				fi
+			fi
+			
 			# LOG red "btmon"
 			# (btmon &> "$DATASTREAMBTTMP_FILE") &
 			(timeout --signal=SIGINT "$((DATA_SCAN_SECONDS*2+7))s" btmon &> "$DATASTREAMBTTMP_FILE") &
@@ -375,7 +412,7 @@ device_hunter() {
 						printf "%s: %s found on BLE!\n" "${text_target_UC}" "${target_mac}" >> "$REPORT_FILE"
 						printf "Scanning BLE only for faster scan...\n" >> "$REPORT_FILE"
 						LOG blue   "-------------------------------------------"
-						LOG cyan   "|- Signal -| -- MAC Address -- - Name/Manuf"
+						LOG cyan   "|- Signal -| -- MAC Address -- - Name/Manuf${gps_disptxt}"
 						LOG blue   "-------------------------------------------"
 					fi
 					if [[ "$check_bttype_seen" -eq 0 ]] ; then 
@@ -398,7 +435,7 @@ device_hunter() {
 							printf "%s: %s found on Classic BT!\n" "${text_target_UC}" "${target_mac}" >> "$REPORT_FILE"
 							printf "Scanning Classic BT only for faster scan...\n" >> "$REPORT_FILE"
 							LOG blue   "-------------------------------------------"
-							LOG cyan   "|- Signal -| -- MAC Address -- - Name/Manuf"
+							LOG cyan   "|- Signal -| -- MAC Address -- - Name/Manuf${gps_disptxt}"
 							LOG blue   "-------------------------------------------"
 						fi
 					fi
@@ -545,6 +582,7 @@ device_hunter() {
 				s/Android Bluedroid/Bluedroid/; 
 				s/Apple, Inc./Apple/; 
 				s/Aruba Networks/Aruba HP/; 
+				s/Audio-Technica Corporation/Audio-Technica/; 
 				s/August Home, Inc/August Home/; 
 				s/Automotive Data Solutions Inc/Automotive Data Solutions/; 
 				s/Bestechnic(Shanghai),Ltd/Bestechnic/; 
@@ -567,12 +605,14 @@ device_hunter() {
 				s/Hatch Baby, Inc./Hatch Baby/; 
 				s/Hewlett-Packard Company/HP/; 
 				s/HP Inc./HP/; 
+				s/Honeywell International Inc./Honeywell/; 
 				s/HUAWEI Technologies Co., Ltd./HUAWEI/; 
 				s/Hubbell Lighting, Inc./Hubbell/; 
 				s/IBM Corp./IBM/; 
 				s/Icon Health and Fitness/iFIT/; 
 				s/InvisionHeart Inc./InvisionHeart/; 
 				s/iRobot Corporation/iRobot/; 
+				s/Keiser Corporation/Keiser/; 
 				s/KiteSpring Inc./KiteSpring/; 
 				s/Klipsch Group, Inc./Klipsch/; 
 				s/Leviton Mfg. Co., Inc./Leviton/; 
@@ -580,7 +620,7 @@ device_hunter() {
 				s/\[LG\] webOS TV/LG webOSTV/; 
 				s/Lippert Components, INC/Lippert/; 
 				s/LumiGeek LLC/LumiGeek/; 
-				s/Nerbio Medical Software Platforms Inc/Nerbio Medical/; 
+				s/Nerbio Medical Software Platforms Inc/Nerbio/; 
 				s/Nest Labs Inc/Nest/; 
 				s/Nikon Corporation/Nikon/; 
 				s/Nintendo Co., Ltd./Nintendo/; 
@@ -623,6 +663,7 @@ device_hunter() {
 				s/TomTom International BV/TomTom/; 
 				s/Toshiba Corp./Toshiba/; 
 				s/Trimble Navigation Ltd./Trimble/; 
+				s/Ubiquitous Computing Technology Corporation/Ubiquitous/; 
 				s/Valve Corporation/Valve/; 
 				s/Victron Energy BV/Victron/; 
 				s/Vizio, Inc./Vizio/; 
@@ -648,6 +689,7 @@ device_hunter() {
 				# sed -i 's/Amazon.com Services, Inc.\./Amazon/; ' "amazon.txt"
 				# cat "amazon.txt"
 				# 
+				# bulb - Leedarson IoT Technology Inc. "$target_oui" == "1C:D6:BD:"
 				
 				# add extra lines to separate addresses
 				sed -i 's/Address:/\n\n\nAddress:/' "$DATASTREAMBT_FILE"
@@ -734,11 +776,6 @@ device_hunter() {
 							if [[ -z "$comp" || "$comp" == "not assigned" || "$comp" == "Unknown" || "$comp" == "Device Information" ]] ; then
 								comp="n/a"
 							fi
-							# bulb - Leedarson IoT Technology Inc.
-							# if [[ "$target_oui" == "1C:D6:BD:" && "$comp" == "n/a" ]] ; then
-							# 	comp="Leedarson"
-							# fi
-							
 							# LOG "comp2: ${comp}"
 							
 							# custom hit check
@@ -961,7 +998,7 @@ device_hunter() {
 			printf "%s bluetooth signals found\n" "${founditems}" >> "$REPORT_FILE"
 			printf "════════════════════════════════════════════\n" >> "$REPORT_FILE"
 			# LOG blue "-------------------------------------------"
-			LOG cyan   "|- Signal -| -- MAC Address -- - Name/Manuf"
+			LOG cyan   "|- Signal -| -- MAC Address -- - Name/Manuf${gps_disptxt}"
 			
 			
 			# printf "════════════════════════════════════════════\n" >> "$REPORT_FILE"
@@ -1392,6 +1429,8 @@ detect_bt_classic() {
 
 # detection scans
 scan_detection() {
+	reset_gpsd
+	
 	# ---- DEFAULTS ----
 	detections=0
 	local scannumber=0
@@ -1401,6 +1440,9 @@ scan_detection() {
 	local searchCount=0
 	local btcl_searchCount=0
 	local btle_searchCount=0
+	
+	# set on each total run
+	gpspos_last=""
 	
 	if [[ "$scan_BT_AXONCAMS" == "true" ]] ; then
 		searchCount=$((searchCount + 1))
@@ -1510,7 +1552,7 @@ scan_detection() {
 	
 	resp=$(CONFIRMATION_DIALOG "Scan for ${searchText} Style Bluetooth Devices?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-	
+		
 		rm "$DATASTREAMBT_FILE" 2>/dev/null
 		rm "$DATASTREAMBT2_FILE" 2>/dev/null
 		rm "$DATASTREAMBT3_FILE" 2>/dev/null
@@ -1549,6 +1591,16 @@ scan_detection() {
 			
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			printf "%s - EVENT: Start scan #%s\n" "$(date +"%Y-%m-%d_%H%M%S")" "${scannumber}" >> "$REPORT_DETECT_FILE"
+			# gps check
+			gpspos_cur=$(GPS_GET)
+			if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+				gpspos_last="$gpspos_cur" # GPS is valid
+				printf "GPS Pos.: %s\n" "${gpspos_last}" >> "$REPORT_DETECT_FILE"
+			else
+				if [[ -n "$gpspos_last" ]] ; then # gps lost, last known coordinates: gpspos_last
+					printf "GPS LOST! %s (Last Known Pos.)\n" "${gpspos_last}" >> "$REPORT_DETECT_FILE"
+				fi
+			fi
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			if [[ "$scan_BT_PINEAPPS" == "true" ]] ; then
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE SLOW; fi
@@ -2699,11 +2751,15 @@ scan_detect_from_scanned() {
 # detect jammers
 detect_jammers() {
 	# LOG "detect_jammers"
+	reset_gpsd
 	
 	# possible cleanup from last run
 	rm "$KEYCKTMP_FILE" 2>/dev/null
 	killall evtest 2>/dev/null
+	
+	# set on each total run
 	cancel_app=0
+	gpspos_last=""
 	
 	# name to be used for device to be pinged
 	local temp_devname="Apple"
@@ -3087,6 +3143,16 @@ detect_jammers() {
 			
 			printf "════════════════════════════════════════════\n" >> "$REPORT_DETJAM_FILE"
 			printf "%s - EVENT: Start scan\n" $(date +"%Y-%m-%d_%H%M%S") >> "$REPORT_DETJAM_FILE"
+			# gps check
+			gpspos_cur=$(GPS_GET)
+			if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+				gpspos_last="$gpspos_cur" # GPS is valid
+				printf "GPS Pos.: %s\n" "${gpspos_last}" >> "$REPORT_DETJAM_FILE"
+			else
+				if [[ -n "$gpspos_last" ]] ; then # gps lost, last known coordinates: gpspos_last
+					printf "GPS LOST! %s (Last Known Pos.)\n" "${gpspos_last}" >> "$REPORT_DETJAM_FILE"
+				fi
+			fi
 			printf "════════════════════════════════════════════\n" >> "$REPORT_DETJAM_FILE"
 			
 
@@ -3262,6 +3328,16 @@ detect_jammers() {
 						LOG red     "-- JAMMED! ---- Jammer CONFIRMED! ----- JAMMED! --"
 					fi
 					LOG blue "--------------------------------------------------"
+					# gps check
+					gpspos_cur=$(GPS_GET)
+					if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+						gpspos_last="$gpspos_cur" # GPS is valid
+						printf "GPS Pos.: %s\n" "${gpspos_last}" >> "$REPORT_DETJAM_FILE"
+					else
+						if [[ -n "$gpspos_last" ]] ; then # gps lost, last known coordinates: gpspos_last
+							printf "GPS LOST! %s (Last Known Pos.)\n" "${gpspos_last}" >> "$REPORT_DETJAM_FILE"
+						fi
+					fi
 					printf "%s - EVENT: Jammer Detected!\n" $(date +"%Y-%m-%d_%H%M%S") >> "$REPORT_DETJAM_FILE"
 					jammerDet=$((jammerDet+1))
 					total_detected=$((total_detected + 1))
@@ -3296,8 +3372,8 @@ detect_jammers() {
 				if [[ "$scan_mute" == "false" ]] ; then
 					RINGTONE "warning"
 				fi
-				LOG red "Jammers detected: $jammerDet"
-				printf "%s bluetooth Jammers found\n" "${jammerDet}" >> "$REPORT_DETJAM_FILE"
+				LOG red "Jammer(s) detected: $jammerDet"
+				printf "%s Bluetooth Jammer(s) found\n" "${jammerDet}" >> "$REPORT_DETJAM_FILE"
 			else
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
 				LOG green "No Jammers detected, all clear!"
