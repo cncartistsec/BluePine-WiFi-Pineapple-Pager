@@ -1,7 +1,7 @@
 #!/bin/bash
 # Title: BluePine
 # Author: cncartist
-# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
+# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
 # Version: 1.1
 # 
@@ -25,7 +25,7 @@
 #  -- -- -- Hunt via Scanning All, Single MAC, OUI prefix, and/or Name.
 #  -- -- -- RSSI meter for each found signal, best signal showing at the bottom of the screen.
 #  -- -- -- Custom configuration allowed and data builds over time in case name or manufacturer is missed on first scans.
-#  -- -- -- Verbose logging / debugging available.
+#  -- -- -- Verbose logging / debugging available, GPS coordinate logging if GPS device enabled.
 #  -- Bluetooth Device Detection: 
 #  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / USB Kill / WiFi Pineapple BT Scanner.
 #  -- -- -- Scan the airwaves, save targets, or scan your already saved target list from Device Hunter scans.
@@ -112,6 +112,8 @@
 #  -- -- -- -- - FAKE/BAD: # LMP Version:  (0xe)  Subversion: 0x201
 #  -- -- -- -- - If you have no "Version: 4.0" in your details, the adapter will not work efficiently and is not a genuine CSR v4.0.
 #  -- Debug / Logging:
+#  -- -- -- Includes GPS coordinate logging if GPS device enabled.
+#  -- -- -- -- - When GPS device enabled, Device Hunter Scan will show 'NoGPS' or '+GPS+' depending on GPS status.
 #  -- -- -- With debug enabled, log files will add up quickly over time in filesize.
 #  -- -- -- -- - Please take care to only debug when needed; it keeps full BT scan LOG files which take significant space.
 #  -- Menu Display / Smaller Font Size for List Picker:
@@ -161,7 +163,6 @@
 # ============================================
 #          Future improvements
 # ============================================
-# gps data tagging for scans?
 # text switch for how many targets found in session or detected
 # build log viewer in?
 # change actual sound setting for system/alerts?
@@ -204,8 +205,6 @@ saved_target_rename=0
 cancel_press=0
 cancel_app=0
 selnum=0
-selnum_main=1
-skip_ask_1st_scan=0
 select_target_go=0
 silent_backup=0
 detections=0
@@ -230,6 +229,7 @@ scan_BT_PINEAPPS="false"
 # scan_BT_APLAIRTG="false"
 savedTargWarn=1000
 savedTargCrit=3000
+gpspos_last=""
 # ---- DEFAULTS ----
 # ---- DEFAULTS SAVED CFG ----
 total_scans=0
@@ -244,6 +244,9 @@ scan_mute="false"
 scan_debug="false"
 custom_oui=""
 custom_name=""
+selnum_main=1
+skip_ask_1st_scan=0
+skip_ask_ringtones=0
 # number in seconds
 DATA_SCAN_SECONDS=5
 # ---- DEFAULTS SAVED CFG ----
@@ -291,9 +294,6 @@ cleanup() {
 }
 trap cleanup EXIT SIGINT SIGTERM SIGHUP
 
-check_dependencies
-check_ringtones
-
 bluepinelogo() {
 	LOG cyan   "¨ ██████╗ ██╗ ¨ ¨ ██╗ ¨ ██╗███████╗¨ ¨ ^x^ . x^ "
 	LOG cyan   "¨ ██╔══██╗██║ ¨ ¨ ██║ ¨ ██║██╔════╝ ^x.:;\,:/_.x^"
@@ -333,6 +333,7 @@ custom_oui=$(PAYLOAD_GET_CONFIG bluepinesuite custom_oui)
 custom_name=$(PAYLOAD_GET_CONFIG bluepinesuite custom_name)
 selnum_main=$(PAYLOAD_GET_CONFIG bluepinesuite selnum_main)
 skip_ask_1st_scan=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_1st_scan)
+skip_ask_ringtones=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_ringtones)
 
 [[ -z "$DATA_SCAN_SECONDS" ]] && DATA_SCAN_SECONDS=5
 [[ -z "$scan_btle" ]] && scan_btle="true"
@@ -349,7 +350,11 @@ skip_ask_1st_scan=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_1st_scan)
 [[ -z "$custom_name" ]] && custom_name=""
 [[ -z "$selnum_main" ]] && selnum_main=1
 [[ -z "$skip_ask_1st_scan" ]] && skip_ask_1st_scan=0
+[[ -z "$skip_ask_ringtones" ]] && skip_ask_ringtones=0
 
+# check dependencies + ringtones
+check_dependencies
+if [[ "$skip_ask_ringtones" -eq 0 ]] ; then check_ringtones; fi
 # check config value versus found
 config_check
 # check settings
@@ -395,11 +400,13 @@ bluepinelogo
 if [[ "$scan_mute" == "false" ]] ; then
 	RINGTONE "flutter" # (short)
 fi
+sleep 0.5
 LOG cyan   "||||||| - Press OK to Start - ||||||| ^^^^^^^^^ ||"
-sleep 0.25
 # LOG blue   "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
 # LOG blue   "||||||||||||||||||||||||||||||||||||||||||||||||||"
+reset_gpsd
 WAIT_FOR_BUTTON_PRESS A
+sleep 0.5
 
 # External Bluetooth Adapter?
 external_bt_check
@@ -770,6 +777,7 @@ while true; do
 						scan_friendly=0
 						scan_stealth=0
 						skip_ask_1st_scan=0
+						skip_ask_ringtones=0
 						DATA_SCAN_SECONDS=5
 						custom_oui=""
 						custom_name=""
@@ -794,6 +802,7 @@ while true; do
 						PAYLOAD_SET_CONFIG bluepinesuite scan_friendly "$scan_friendly"
 						PAYLOAD_SET_CONFIG bluepinesuite scan_stealth "$scan_stealth"
 						PAYLOAD_SET_CONFIG bluepinesuite skip_ask_1st_scan "$skip_ask_1st_scan"
+						PAYLOAD_SET_CONFIG bluepinesuite skip_ask_ringtones "$skip_ask_ringtones"
 						PAYLOAD_SET_CONFIG bluepinesuite custom_oui "$custom_oui"
 						PAYLOAD_SET_CONFIG bluepinesuite custom_name "$custom_name"
 						LOG "Settings saved..."
@@ -876,6 +885,20 @@ while true; do
 		else
 			LOG red "CSR Functionality DISABLED | Loot/Reports: $lootreports"
 		fi
+		gpspos_cur=$(GPS_GET)
+		if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+			gpspos_last="$gpspos_cur" # GPS is valid
+		fi
+		if [[ -n "$gpspos_last" ]] ; then
+			# requires no quote on end
+			printf -v gps_formatted "%.4f %.4f %.4f %.4f" $gpspos_last
+			if [[ "$scan_privacy" -eq 1 ]] ; then 
+				LOG "GPS Last Pos.: -+ Hidden +-"
+			else
+				LOG "GPS Last Pos.: $gps_formatted"
+			fi
+		fi
+
 		sleep 0.25
 		LOG magenta "================================== Scan Info ===="
 		LOG cyan "Total Scans: $total_scans | Malicious Items Found: $total_detected"
