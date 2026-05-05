@@ -34,7 +34,7 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 
 # Title: BluePine
 # Author: cncartist
-# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
+# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
 # Version: 1.1
 # 
@@ -58,7 +58,7 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 #  -- -- -- Hunt via Scanning All, Single MAC, OUI prefix, and/or Name.
 #  -- -- -- RSSI meter for each found signal, best signal showing at the bottom of the screen.
 #  -- -- -- Custom configuration allowed and data builds over time in case name or manufacturer is missed on first scans.
-#  -- -- -- Verbose logging / debugging available.
+#  -- -- -- Verbose logging / debugging available, GPS coordinate logging if GPS device enabled.
 #  -- Bluetooth Device Detection: 
 #  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / USB Kill / WiFi Pineapple BT Scanner.
 #  -- -- -- Scan the airwaves, save targets, or scan your already saved target list from Device Hunter scans.
@@ -145,6 +145,8 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 #  -- -- -- -- - FAKE/BAD: # LMP Version:  (0xe)  Subversion: 0x201
 #  -- -- -- -- - If you have no "Version: 4.0" in your details, the adapter will not work efficiently and is not a genuine CSR v4.0.
 #  -- Debug / Logging:
+#  -- -- -- Includes GPS coordinate logging if GPS device enabled.
+#  -- -- -- -- - When GPS device enabled, Device Hunter Scan will show 'NoGPS' or '+GPS+' depending on GPS status.
 #  -- -- -- With debug enabled, log files will add up quickly over time in filesize.
 #  -- -- -- -- - Please take care to only debug when needed; it keeps full BT scan LOG files which take significant space.
 #  -- Menu Display / Smaller Font Size for List Picker:
@@ -194,7 +196,6 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 # ============================================
 #          Future improvements
 # ============================================
-# gps data tagging for scans?
 # text switch for how many targets found in session or detected
 # build log viewer in?
 # change actual sound setting for system/alerts?
