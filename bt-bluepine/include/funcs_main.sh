@@ -939,15 +939,19 @@ saved_targets_saveall() {
 				# Check if the string exists in the file
 				if grep -q "$mac" "$SAVEDTARGETS_FILE"; then
 					# echo "The string variable exists in the file."
-					# remove lines that has mac first
-					sed -i "/$mac/d" "$SAVEDTARGETS_FILE"
-					printf "%s %s\n" "${mac}" "${NEW_TARGET_MAC_NAME}" >> "$SAVEDTARGETS_FILE"
+					# only add if new name known, otherwise leave unchanged
+					if [[ "$NEW_TARGET_MAC_NAME" != "Unknown" ]] ;
+						# remove lines that have mac first
+						sed -i "/$mac/d" "$SAVEDTARGETS_FILE"
+						printf "%s %s\n" "${mac}" "${NEW_TARGET_MAC_NAME}" >> "$SAVEDTARGETS_FILE"
+						BT_TARGETS_SAVED[$mac]="$NEW_TARGET_MAC_NAME"
+					fi
 				else
 					# echo "The string variable does not exist in the file."
 					printf "%s %s\n" "${mac}" "${NEW_TARGET_MAC_NAME}" >> "$SAVEDTARGETS_FILE"
+					BT_TARGETS_SAVED[$mac]="$NEW_TARGET_MAC_NAME"
 					addedtargs=$((addedtargs + 1))
 				fi
-				BT_TARGETS_SAVED[$mac]="$NEW_TARGET_MAC_NAME"
 			done
 			LOG green "Added ${addedtargs} to Saved ${text_target_UC}s List."
 			LOG "Press OK to continue..."
