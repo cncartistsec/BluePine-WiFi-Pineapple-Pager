@@ -1,7 +1,7 @@
 #!/bin/bash
 # Menu Functions for BluePine
 # Author: cncartist
-# Version: 1.1
+# Version: 1.2
 # 
 # check_dependencies
 # check_ringtones
@@ -270,9 +270,11 @@ external_bt_check() {
 				LOG blue  "================================================="
 				LOG " "
 				LOG magenta "Have CSR BT but booted Pager with USB plugged in?"
-				LOG " "
 				LOG cyan "If so, please reboot the Pager without USB BT."
 				LOG cyan "Then Plugin USB BT after boot..."
+				LOG " "
+				LOG magenta  "Also try unplugging and replugging USB BT, then"
+				LOG magenta  "Re-check at Preferences > Bluetooth > Retest CSR"
 				LOG blue  "================================================="
 				LOG "Press OK to continue..."
 				LOG " "
@@ -284,6 +286,7 @@ external_bt_check() {
 			LOG red  "========= ERROR! Device hci1 Not found! ========="
 			LOG red  "========== Using $BLE_IFACE / Default Device =========="
 			LOG red  "========= Functionality may be limited! ========="
+			LOG red  "Try unplugging and replugging USB BT, then"
 			LOG red  "Re-check at Preferences > Bluetooth > Retest CSR"
 			LOG blue "================================================="
 			LOG "Press OK to continue..."
