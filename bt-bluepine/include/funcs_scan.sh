@@ -1069,10 +1069,10 @@ device_hunter() {
 			fi
 			
 			# reset GPS on scan interval, verify connection and clear stale data
-			if [[ -n "$gpspos_last" ]] && (( gps_same_count % 3 == 0 )) && (( gps_same_count != 0 )); then
+			if [[ -n "$gpspos_last" ]] && (( gps_same_count % 8 == 0 )) && (( gps_same_count != 0 )); then
 				# same exact gps coordinates received multiple times in a row, verify gps is still active
 				LOG blue   "-------------------------------------------"
-				LOG red "GPS caught in a coordinate loop, resetting..."
+				LOG magenta "GPS caught in a coordinate loop, resetting..."
 				show_header_extra=1
 				gps_same_count=0
 				(reset_gpsd) &
