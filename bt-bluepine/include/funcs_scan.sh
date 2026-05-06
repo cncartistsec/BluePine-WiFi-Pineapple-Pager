@@ -1,7 +1,7 @@
 #!/bin/bash
 # Scan Functions for BluePine
 # Author: cncartist
-# Version: 1.1
+# Version: 1.2
 # 
 # reset_bt_adapter
 # rssitxtsw_hci0
@@ -181,11 +181,14 @@ reset_gpsd() {
 # device hunter function
 device_hunter() {
 	reset_gpsd
+	sleep 1 # give time for GPS_GET to catchup
 	
 	resp=$(CONFIRMATION_DIALOG "Modify current scan settings?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]]; then
 		scantime_config
 		scantype_config
+	else
+		sleep 1 # give time for GPS_GET to catchup
 	fi
 	
 	resp=$(CONFIRMATION_DIALOG "Confirm scan for ${text_target_LC}(s)?")
@@ -193,6 +196,7 @@ device_hunter() {
 		local scannumber=0
 		local founditems=0
 		local select_target_seen=0
+		local select_target_pres=0
 		local check_bttype_seen=0
 		local checkouionly=0
 		local custom_hit=0
@@ -205,6 +209,8 @@ device_hunter() {
 		local pattern5="Name \(complete\):"
 		local SEARCH_STRING=""
 		local gps_disptxt=""
+		local gps_same_count=0
+		local show_header_extra=0
 		
 		# set on each total run
 		cancel_app=0
@@ -269,12 +275,11 @@ device_hunter() {
 			fi
 		fi
 		
-		
-		
 		printf "  Date: %s\n" "${TIMESTAMP}" >> "$REPORT_FILE"
 		printf "═════════════════════════════════════════════════\n\n" >> "$REPORT_FILE"
 		printf "═════════════════════════════════════════════════\n" >> "$REPORT_FILE"
 		LOG blue "================================================="
+		sleep 2 # give time for GPS_GET to catchup
 		
 		if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
 		if [[ "$scan_mute" == "false" ]] ; then
@@ -296,25 +301,19 @@ device_hunter() {
 				printf "Scanning LE Bluetooth for %s seconds.\n" "${DATA_SCAN_SECONDS}" >> "$REPORT_FILE"
 			fi
 		fi
+		sleep 1 # give time for GPS_GET to catchup
 		if [[ "$scan_infrepeat" -eq 1 ]] ; then
 			LOG "Scanning... Press OK to pause/stop."
 		else
 			LOG "Scanning... Press BACK to stop."
 		fi
+		sleep 1 # give time for GPS_GET to catchup
 		
 		# first check to set header
 		gpspos_cur=$(GPS_GET)
 		if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
 			gpspos_last="$gpspos_cur"; gps_disptxt=' +GPS+' # GPS is valid
-		else
-			if [[ -n "$gpspos_last" ]] ; then
-				gps_disptxt=' NoGPS' # gps lost, last known coordinates: gpspos_last
-			fi
 		fi
-		
-		LOG blue "-------------------------------------------"
-		LOG cyan "|- Signal -| -- MAC Address -- - Name/Manuf${gps_disptxt}"
-		LOG blue "-------------------------------------------"
 		
 		# start key check collection
 		if [[ "$scan_infrepeat" -eq 1 ]] ; then start_evtest; fi
@@ -337,30 +336,44 @@ device_hunter() {
 			# declare -A BT_NAMES
 			# declare -A BT_COMPS
 			founditems=0
+			show_header_extra=0
+			select_target_pres=0
 
 			if [[ "$scan_infrepeat" -eq 1 ]] ; then check_cancel; if [[ "$cancel_app" -eq 1 ]]; then break; fi fi
 			
 			printf "════════════════════════════════════════════\n" >> "$REPORT_FILE"
 			printf "%s - EVENT: Start scan #%s\n" "$(date +"%Y-%m-%d_%H%M%S")" "${scannumber}" >> "$REPORT_FILE"
 			
-			# set on each run
-			gps_disptxt=""; gpspos_cur=$(GPS_GET)
-			if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
-				# GPS is valid
-				gpspos_last="$gpspos_cur"; gps_disptxt=' +GPS+'
-				printf "GPS Pos.: %s\n" "${gpspos_last}" >> "$REPORT_FILE"
-			else
-				if [[ -n "$gpspos_last" ]] ; then
-					# gps lost, last known coordinates: gpspos_last
-					gps_disptxt=' NoGPS'
-					printf "GPS LOST! %s (Last Known Pos.)\n" "${gpspos_last}" >> "$REPORT_FILE"
-				fi
-			fi
-			
 			# LOG red "btmon"
 			# (btmon &> "$DATASTREAMBTTMP_FILE") &
 			(timeout --signal=SIGINT "$((DATA_SCAN_SECONDS*2+7))s" btmon &> "$DATASTREAMBTTMP_FILE") &
 			sleep 1
+			
+			# set on each run
+			gps_disptxt=""; gpspos_cur=$(GPS_GET)
+			if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+				# LOG red "have GPS!"
+				# gpspos_cur="1 2 3 4"
+				if [[ "$gpspos_last" == "$gpspos_cur" ]] ; then
+					gps_same_count=$((gps_same_count + 1))
+				else
+					gps_same_count=0
+				fi
+				gpspos_last="$gpspos_cur"; gps_disptxt=' +GPS+' # GPS is valid
+				printf "GPS Pos.: %s\n" "${gpspos_last}" >> "$REPORT_FILE"
+			else
+				# LOG red "NO GPS!"
+				if [[ -n "$gpspos_last" ]] ; then
+					gps_disptxt=' NoGPS' # gps lost, last known coordinates: gpspos_last
+					printf "GPS LOST! %s (Last Known Pos.)\n" "${gpspos_last}" >> "$REPORT_FILE"
+				fi
+			fi
+			
+			if [[ "$scannumber" -eq 1 ]] ; then
+				LOG blue "-------------------------------------------"
+				LOG cyan "|- Signal -| -- MAC Address -- - Name/Manuf${gps_disptxt}"
+				LOG blue "-------------------------------------------"
+			fi
 			
 			if [[ "$scan_btclassic" == "true" ]] ; then
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE SLOW; fi
@@ -998,6 +1011,15 @@ device_hunter() {
 			printf "%s bluetooth signals found\n" "${founditems}" >> "$REPORT_FILE"
 			printf "════════════════════════════════════════════\n" >> "$REPORT_FILE"
 			# LOG blue "-------------------------------------------"
+			
+			gpspos_cur=$(GPS_GET) # check gps
+			if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+				gps_disptxt=' +GPS+' # GPS is valid
+			else
+				if [[ -n "$gpspos_last" ]] ; then
+					gps_disptxt=' NoGPS' # gps lost, last known coordinates: gpspos_last
+				fi
+			fi
 			LOG cyan   "|- Signal -| -- MAC Address -- - Name/Manuf${gps_disptxt}"
 			
 			
@@ -1010,10 +1032,11 @@ device_hunter() {
 			
 			if [[ "$skip_ask_1st_scan" -eq 0 && "${#BT_RSSIS[@]}" -gt 0 && "$select_target_seen" -eq 0 && "$cancel_app" -eq 0 && "$scan_targeted" == "false" ]] ; then
 				killall evtest 2>/dev/null
+				LOG blue   "-------------------------------------------"
 				LOG "Check results and Press OK..."
-				LOG " "
 				WAIT_FOR_BUTTON_PRESS A
 				select_target_seen=1
+				select_target_pres=1
 				resp=$(CONFIRMATION_DIALOG "Do you want to select a ${text_target_LC} from the results?")
 				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 					cancel_app=1
@@ -1026,12 +1049,15 @@ device_hunter() {
 						sleep 0.5
 						break
 					fi
-					start_evtest
-					LOG blue   "-------------------------------------------"
-					LOG magenta "Long Press or Tap OK to pause/stop..."
-					LOG magenta "Cannot be paused/stopped while BT scanning"
-					LOG magenta "It may take a couple seconds to process..."
-					sleep 2
+					if [[ "$scan_infrepeat" -eq 1 ]] ; then
+						start_evtest
+						LOG blue   "-------------------------------------------"
+						LOG magenta "Long Press or Tap OK to pause/stop..."
+						LOG magenta "Cannot be paused/stopped while BT scanning"
+						LOG magenta "It may take a couple seconds to process..."
+						show_header_extra=1
+						sleep 2
+					fi
 				fi
 			fi
 			if [[ "$scan_infrepeat" -eq 1 ]] && (( scannumber % 20 == 0 )) && (( scannumber != 0 )); then
@@ -1039,11 +1065,31 @@ device_hunter() {
 				LOG magenta "Long Press or Tap OK to pause/stop..."
 				LOG magenta "Cannot be paused/stopped while BT scanning"
 				LOG magenta "It may take a couple seconds to process..."
+				show_header_extra=1
 			fi
+			
+			# reset GPS on scan interval, verify connection and clear stale data
+			if [[ -n "$gpspos_last" ]] && (( gps_same_count % 3 == 0 )) && (( gps_same_count != 0 )); then
+				# same exact gps coordinates received multiple times in a row, verify gps is still active
+				LOG blue   "-------------------------------------------"
+				LOG red "GPS caught in a coordinate loop, resetting..."
+				show_header_extra=1
+				gps_same_count=0
+				(reset_gpsd) &
+				# reset for GPS_GET takes 10 seconds, prevent lost gps on reset
+				# LOG red "RESETTING GPSD 10 seconds..."
+				sleep 10
+			fi
+			
+			if [[ "$show_header_extra" -eq 1 ]] ; then
+				LOG blue   "-------------------------------------------"
+				LOG cyan   "|- Signal -| -- MAC Address -- - Name/Manuf${gps_disptxt}"
+			fi
+			
 			if [[ "$scan_infrepeat" -eq 0 ]] ; then
-				if [[ "${#BT_RSSIS[@]}" -gt 0 && "$scan_targeted" == "false" ]] ; then
+				if [[ "${#BT_RSSIS[@]}" -gt 0 && "$scan_targeted" == "false" && "$select_target_pres" -eq 0 ]] ; then
+					LOG blue   "-------------------------------------------"
 					LOG "Check results and Press OK..."
-					LOG " "
 					WAIT_FOR_BUTTON_PRESS A
 					sleep 3
 					resp=$(CONFIRMATION_DIALOG "Do you want to select a ${text_target_LC} from the results?")
@@ -1051,17 +1097,18 @@ device_hunter() {
 						cancel_app=1
 						select_target_go=1
 						break
-						resp=$(CONFIRMATION_DIALOG "Do you want to continue scanning?")
-						if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-							cancel_app=1
-							select_target_go=1
-							break
-						fi
+					fi
+					resp=$(CONFIRMATION_DIALOG "Do you want to continue scanning?")
+					if [[ "$resp" != "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+						cancel_app=1
+						sleep 0.5
+						break
 					fi
 				fi
-				LOG blue   "----------------- Press OK to scan again..."
+				# LOG blue   "----------------- Press OK to scan again..."
 				# LOG "scan_infrepeat: $scan_infrepeat"
-				WAIT_FOR_BUTTON_PRESS A
+				# WAIT_FOR_BUTTON_PRESS A
+				LOG blue   "------------------------- Scanning again..."
 			else
 				LOG blue   "------------------------- Scanning again..."
 				sleep 0.25
