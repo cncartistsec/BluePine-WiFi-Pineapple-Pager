@@ -1,7 +1,7 @@
 #!/bin/bash
 # Main Functions for BluePine
 # Author: cncartist
-# Version: 1.1
+# Version: 1.2
 # 
 # update_bluetooth_status
 # update_bluetooth_name
@@ -507,7 +507,6 @@ update_bluetooth_mac(){
 			LOG " "
 			WAIT_FOR_BUTTON_PRESS A
 		fi
-		
 		
 		# Confirm change
 		resp=$(CONFIRMATION_DIALOG "Do you also want to choose a new Permament Alias/Name for ${NEW_MAC} ?")
