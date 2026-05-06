@@ -3,7 +3,7 @@
 # Author: cncartist
 # Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.1
+# Version: 1.2
 # 
 # ============================================
 # Acknowledgements: 
@@ -393,10 +393,13 @@ if [[ "$scan_friendly" -eq 1 ]] || [[ "$scan_privacy" -eq 1 ]] || [[ "$scan_stea
 	sleep 1
 fi
 
+# reset gpsd in background
+(reset_gpsd) &
 # verify bluetoothd running at start
 bluetoothd_check
 # run saved targets check/load
 saved_targets_check
+
 # start logo and display
 LOG blue   "|||||||||||||||||||||||||||||||||||||¨¨¨¨¨¨¨¨¨¨¨¨¨"
 sleep 1
@@ -408,7 +411,6 @@ sleep 0.5
 LOG cyan   "||||||| - Press OK to Start - ||||||| ^^^^^^^^^ ||"
 # LOG blue   "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
 # LOG blue   "||||||||||||||||||||||||||||||||||||||||||||||||||"
-reset_gpsd
 WAIT_FOR_BUTTON_PRESS A
 sleep 0.5
 
