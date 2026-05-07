@@ -338,12 +338,12 @@ global_config() {
 		scan_default="true"
 		
 		# START = SET HERE - Custom config for quick scans
-		DATA_SCAN_SECONDS=5
+		DATA_SCAN_SECONDS=7
 		scan_btle="true"
 		scan_btclassic="true"
 		scan_infrepeat=1
 		scan_mute="false"
-		scan_debug="true"
+		scan_debug="false"
 		skip_ask_1st_scan=0
 		# DONE = SET HERE - Custom config for quick scans
 		
