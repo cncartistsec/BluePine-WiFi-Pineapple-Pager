@@ -352,8 +352,7 @@ device_hunter() {
 			# set on each run
 			gps_disptxt=""; gpspos_cur=$(GPS_GET)
 			if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
-				# LOG red "have GPS!"
-				# gpspos_cur="1 2 3 4"
+				# LOG red "have GPS!" # gpspos_cur="1 2 3 4"
 				if [[ "$gpspos_last" == "$gpspos_cur" ]] ; then
 					gps_same_count=$((gps_same_count + 1))
 				else
@@ -390,8 +389,8 @@ device_hunter() {
 			if [[ "$scan_btle" == "true" ]] ; then
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED CYAN SLOW; fi
 				#run le scan second	
-				(timeout --signal=SIGINT "$((DATA_SCAN_SECONDS*75/100))s" hcitool -i "$BLE_IFACE" lescan) &
-				sleep $((DATA_SCAN_SECONDS*75/100))
+				(timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" lescan) &
+				sleep ${DATA_SCAN_SECONDS}
 			fi
 			
 			#finish scans
@@ -465,12 +464,7 @@ device_hunter() {
 				printf "\n\n\n\n" >> "$DATASTREAMBTTMP_FILE"
 				
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE; fi
-				# removing pineapple pager reading itself as an item via hardware info
-					# still allows it to detect other interface if enabled
-					# test with discoverable pineapple pager to see where it shows up
-					# hciconfig -a # show status
-					# hciconfig hci0 up piscan # make discoverable
-					# hciconfig hci0 up noscan # turn off discoverable
+				# correct pineapple pager reading its own address/device via hardware info
 				# remove these lines and two after # sed -i '/PATTERN/,+2d' "$DATASTREAMBTTMP_FILE"
 				sed -i '
 				/BR\/EDR Address:/ {d}; 
@@ -1069,10 +1063,10 @@ device_hunter() {
 			fi
 			
 			# reset GPS on scan interval, verify connection and clear stale data
-			if [[ -n "$gpspos_last" ]] && (( gps_same_count % 8 == 0 )) && (( gps_same_count != 0 )); then
+			if [[ -n "$gpspos_last" ]] && (( gps_same_count % 6 == 0 )) && (( gps_same_count != 0 )); then
 				# same exact gps coordinates received multiple times in a row, verify gps is still active
 				LOG blue   "-------------------------------------------"
-				LOG magenta "GPS caught in a coordinate loop, resetting..."
+				LOG magenta "GPS caught in coordinate loop, resetting..."
 				show_header_extra=1
 				gps_same_count=0
 				(reset_gpsd) &
@@ -1477,6 +1471,7 @@ detect_bt_classic() {
 # detection scans
 scan_detection() {
 	reset_gpsd
+	sleep 3 # give time for GPS_GET to catchup
 	
 	# ---- DEFAULTS ----
 	detections=0
@@ -1595,10 +1590,13 @@ scan_detection() {
 	resp=$(CONFIRMATION_DIALOG "Modify current scan settings?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]]; then
 		scantime_config
+	else
+		sleep 2 # give time for GPS_GET to catchup
 	fi
 	
 	resp=$(CONFIRMATION_DIALOG "Scan for ${searchText} Style Bluetooth Devices?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		sleep 1 # give time for GPS_GET to catchup
 		
 		rm "$DATASTREAMBT_FILE" 2>/dev/null
 		rm "$DATASTREAMBT2_FILE" 2>/dev/null
@@ -1623,6 +1621,7 @@ scan_detection() {
 		if [[ "$scan_debug" == "true" ]] ; then
 			LOG magenta "DEBUG mode / extra logging ACTIVATED"
 		fi
+		sleep 2 # give time for GPS_GET to catchup
 		
 		while true; do
 			detections=0
