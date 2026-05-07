@@ -1846,10 +1846,10 @@ settings_check() {
 	# check values of settings
 	if [[ "$DATA_SCAN_SECONDS" -gt 2 ]]; then
 		if [[ "$DATA_SCAN_SECONDS" -gt 20 ]]; then
-			DATA_SCAN_SECONDS=5
+			DATA_SCAN_SECONDS=7
 		fi
 	else
-		DATA_SCAN_SECONDS=5
+		DATA_SCAN_SECONDS=7
 	fi
 	if [[ "$scan_btle" == "true" ]]; then scan_btle="true"; else scan_btle="false"; fi
 	if [[ "$scan_btclassic" == "true" ]]; then scan_btclassic="true"; else scan_btclassic="false"; fi
@@ -1910,7 +1910,7 @@ config_check() {
 config_read() {
 	local line=""; local lineCk=""; local re='^[0-9]+$'
 	line=$(jq -r '.DATA_SCAN_SECONDS' "$SAVEDCONFIG_FILE") # check if num
-	if [[ "$line" =~ $re ]] ; then DATA_SCAN_SECONDS="$line"; else DATA_SCAN_SECONDS=5; fi
+	if [[ "$line" =~ $re ]] ; then DATA_SCAN_SECONDS="$line"; else DATA_SCAN_SECONDS=7; fi
 	line=$(jq -r '.scan_btle' "$SAVEDCONFIG_FILE") # check if true
 	if [[ "$line" == "true" ]]; then scan_btle="true"; else scan_btle="false"; fi
 	line=$(jq -r '.scan_btclassic' "$SAVEDCONFIG_FILE") # check if true
