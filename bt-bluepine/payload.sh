@@ -252,7 +252,7 @@ selnum_main=1
 skip_ask_1st_scan=0
 skip_ask_ringtones=0
 # number in seconds
-DATA_SCAN_SECONDS=5
+DATA_SCAN_SECONDS=7
 # ---- DEFAULTS SAVED CFG ----
 
 # ---- ARRAYS ----
@@ -339,7 +339,7 @@ selnum_main=$(PAYLOAD_GET_CONFIG bluepinesuite selnum_main)
 skip_ask_1st_scan=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_1st_scan)
 skip_ask_ringtones=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_ringtones)
 
-[[ -z "$DATA_SCAN_SECONDS" ]] && DATA_SCAN_SECONDS=5
+[[ -z "$DATA_SCAN_SECONDS" ]] && DATA_SCAN_SECONDS=7
 [[ -z "$scan_btle" ]] && scan_btle="true"
 [[ -z "$scan_btclassic" ]] && scan_btclassic="true"
 [[ -z "$scan_infrepeat" ]] && scan_infrepeat=1
@@ -777,14 +777,14 @@ while true; do
 						scan_btclassic="true"
 						scan_infrepeat=1
 						scan_mute="false"
-						scan_debug="true"
+						scan_debug="false"
 						scan_targeted="false"
 						scan_privacy=0
 						scan_friendly=0
 						scan_stealth=0
 						skip_ask_1st_scan=0
 						skip_ask_ringtones=0
-						DATA_SCAN_SECONDS=5
+						DATA_SCAN_SECONDS=7
 						custom_oui=""
 						custom_name=""
 						LED MAGENTA
@@ -945,9 +945,9 @@ while true; do
 			fi
 		fi
 		if [[ "$scan_mute" == "false" ]] ; then
-			LOG "Repeat: $scan_infrepeat | Sound effects: On | Debug: $scan_debug"
+			LOG "Repeat: $scan_infrepeat | Sound Effects: On | Debug: $scan_debug"
 		else
-			LOG "Repeat: $scan_infrepeat | Sound effects: Off | Debug: $scan_debug"
+			LOG "Repeat: $scan_infrepeat | Sound Effects: Off | Debug: $scan_debug"
 		fi
 		LOG "Stealth Mode: $scan_stealth | Privacy: $scan_privacy | Friendly: $scan_friendly"
 		# LOG magenta "======================================= Info ===="
