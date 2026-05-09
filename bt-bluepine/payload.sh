@@ -3,7 +3,7 @@
 # Author: cncartist
 # Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.2
+# Version: 1.3
 # 
 # ============================================
 # Acknowledgements: 
@@ -17,6 +17,7 @@
 # Fuzz_Finder - Author: OSINTI4L - (Axon OUIs)
 # https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE/tree/main - (CC Skimmer Data)
 # https://github.com/colonelpanichacks/flock-you/tree/main - (Flock OUIs + Names)
+# StamenScan - Author: FusedStamen - https://github.com/FusedStamen/StamenScan/tree/main - (MAC filter idea)
 # 
 # ============================================
 # Includes: 
@@ -25,6 +26,7 @@
 #  -- -- -- Hunt via Scanning All, Single MAC, OUI prefix, and/or Name.
 #  -- -- -- RSSI meter for each found signal, best signal showing at the bottom of the screen.
 #  -- -- -- Custom configuration allowed and data builds over time in case name or manufacturer is missed on first scans.
+#  -- -- -- Filters allowed, remove MAC addresses from scan that match Multicast/Random/Locally Administered.
 #  -- -- -- Verbose logging / debugging available, GPS coordinate logging if GPS device enabled.
 #  -- Bluetooth Device Detection: 
 #  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / USB Kill / WiFi Pineapple BT Scanner.
@@ -94,6 +96,15 @@
 #  -- -- -- The best way to get used to the sensitivity is to scan for known devices and locate them within close range to see the sensitivity received.
 #  -- -- -- There are many factors in Bluetooth sensitivity; walls & windows bounce or weaken signal, desks/objects can weaken signal, orientation of the pager can matter, and signals can look weak until you get closer to the actual source/Bluetooth chip on the target device. 
 #  -- -- -- Using an external USB CSR8510 / CSR v4.0 Bluetooth Adapter, you can achieve better sensitivity and range.
+#  -- -- -- Filters: 
+#  -- -- -- -- - Filters act on the first Octet of a MAC (12:), or the MAC OUI/first 6 digits (12:34:56)
+#  -- -- -- -- - Adding Filters allows faster processing, removes Targets from results, and helps if you know which MACs you are searching for.
+#  -- -- -- -- - OUI: Empty OUI (00:00:00)
+#  -- -- -- -- - Basic: Multicast (Group) 01 & Locally Administered (Unicast) 02
+#  -- -- -- -- - Multi: ALL Multicast (01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF)
+#  -- -- -- -- - Multi: ALL Locally Administered (x2, x6, xA, xE)
+#  -- -- -- -- - Multi: ALL Random (x3, x7, xB, xF)
+#  -- -- -- -- - WARNING: Filters REMOVE real devices from report/display and only applies to non-targeted scans!
 #  -- Bluetooth Jammer Detector & Locator:
 #  -- -- -- "Jam" counter resets every 25 "nojams" to clean out errors, and the "Found" counter will only count true confirmed jams in the area.
 #  -- -- -- Confirmed jams are calculated at 5 jams per 25 scans.
@@ -161,9 +172,15 @@
 # warning       DETECT FOUND ITEMS
 # ScaleTrill    DETECT FOUND NONE
 # ============================================
+#            Version History
+# ============================================
+# v1.3 -- Filtering Options + Scantime Tracking
+# v1.2 -- GPS Updates + Bug Fixes
+# v1.1 -- Configuration Saving + Added Functionality
+# v1.0 -- Initial Release
+# ============================================
 #          Future improvements
 # ============================================
-# text switch for how many targets found in session or detected
 # build log viewer in?
 # change actual sound setting for system/alerts?
 # implement sql lite db instead of current method?
@@ -218,7 +235,6 @@ priv_mac_save=""
 priv_name_txt="-+ Name Hidden +-"
 priv_mac_num="12:34:56:78:90:AB"
 priv_mac_txt="░░:░░:░░:░░:░░:░░"
-show_menu_end_OK=1
 scan_BT_AXONCAMS="false"
 scan_BT_CCSKIMMR="false"
 scan_BT_FLIPPERS="false"
@@ -238,6 +254,7 @@ text_target_LC="device"
 # ---- DEFAULTS SAVED CFG ----
 total_scans=0
 total_detected=0
+total_scan_min=0
 scan_privacy=0
 scan_friendly=0
 scan_stealth=0
@@ -251,6 +268,11 @@ custom_name=""
 selnum_main=1
 skip_ask_1st_scan=0
 skip_ask_ringtones=0
+filter_multilocal=0
+filter_randomall=0
+filter_localall=0
+filter_multiall=0
+filter_emptyoui=0
 # number in seconds
 DATA_SCAN_SECONDS=7
 # ---- DEFAULTS SAVED CFG ----
@@ -330,6 +352,7 @@ scan_mute=$(PAYLOAD_GET_CONFIG bluepinesuite scan_mute)
 scan_debug=$(PAYLOAD_GET_CONFIG bluepinesuite scan_debug)
 total_scans=$(PAYLOAD_GET_CONFIG bluepinesuite total_scans)
 total_detected=$(PAYLOAD_GET_CONFIG bluepinesuite total_detected)
+total_scan_min=$(PAYLOAD_GET_CONFIG bluepinesuite total_scan_min)
 scan_privacy=$(PAYLOAD_GET_CONFIG bluepinesuite scan_privacy)
 scan_friendly=$(PAYLOAD_GET_CONFIG bluepinesuite scan_friendly)
 scan_stealth=$(PAYLOAD_GET_CONFIG bluepinesuite scan_stealth)
@@ -338,6 +361,11 @@ custom_name=$(PAYLOAD_GET_CONFIG bluepinesuite custom_name)
 selnum_main=$(PAYLOAD_GET_CONFIG bluepinesuite selnum_main)
 skip_ask_1st_scan=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_1st_scan)
 skip_ask_ringtones=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_ringtones)
+filter_multilocal=$(PAYLOAD_GET_CONFIG bluepinesuite filter_multilocal)
+filter_randomall=$(PAYLOAD_GET_CONFIG bluepinesuite filter_randomall)
+filter_localall=$(PAYLOAD_GET_CONFIG bluepinesuite filter_localall)
+filter_multiall=$(PAYLOAD_GET_CONFIG bluepinesuite filter_multiall)
+filter_emptyoui=$(PAYLOAD_GET_CONFIG bluepinesuite filter_emptyoui)
 
 [[ -z "$DATA_SCAN_SECONDS" ]] && DATA_SCAN_SECONDS=7
 [[ -z "$scan_btle" ]] && scan_btle="true"
@@ -347,6 +375,7 @@ skip_ask_ringtones=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_ringtones)
 [[ -z "$scan_debug" ]] && scan_debug="false"
 [[ -z "$total_scans" ]] && total_scans=0
 [[ -z "$total_detected" ]] && total_detected=0
+[[ -z "$total_scan_min" ]] && total_scan_min=0
 [[ -z "$scan_privacy" ]] && scan_privacy=0
 [[ -z "$scan_friendly" ]] && scan_friendly=0
 [[ -z "$scan_stealth" ]] && scan_stealth=0
@@ -355,6 +384,11 @@ skip_ask_ringtones=$(PAYLOAD_GET_CONFIG bluepinesuite skip_ask_ringtones)
 [[ -z "$selnum_main" ]] && selnum_main=1
 [[ -z "$skip_ask_1st_scan" ]] && skip_ask_1st_scan=0
 [[ -z "$skip_ask_ringtones" ]] && skip_ask_ringtones=0
+[[ -z "$filter_multilocal" ]] && filter_multilocal=0
+[[ -z "$filter_randomall" ]] && filter_randomall=0
+[[ -z "$filter_localall" ]] && filter_localall=0
+[[ -z "$filter_multiall" ]] && filter_multiall=0
+[[ -z "$filter_emptyoui" ]] && filter_emptyoui=0
 
 # check dependencies + ringtones
 check_dependencies
@@ -419,7 +453,6 @@ external_bt_check
 
 while true; do
 	scan_custom=0
-	show_menu_end_OK=1
 	main_menu
 	main_option="$selnum"
 	if [[ "$main_option" -eq 1 ]]; then
@@ -706,23 +739,9 @@ while true; do
 				LOG "Stealth Mode / Disable LEDS...."
 				stealth_config
 			elif [[ "$submenu_option" -eq 6 ]]; then
-				LOG "Backup / Restore Config & History...."
-				resp=$(CONFIRMATION_DIALOG "Backup Config & History?")
-				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-					config_backup
-				else 
-					LOG "Backup Config & History skipped..."
-				fi
-				# check file has contents
-				if [[ -s "$SAVEDCONFIG_FILE" ]]; then
-					sleep 0.5
-					resp=$(CONFIRMATION_DIALOG "Restore Config & History?")
-					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-						config_restore
-					else 
-						LOG "Restore Config & History skipped..."
-					fi
-				fi
+				LOG "Device ${text_hunt_UC}er Scan Filter Config...."
+				filter_config
+				LOG " "
 			elif [[ "$submenu_option" -eq 7 ]]; then
 				LOG "Clear History / Data / Settings...."
 				resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL History / Scan Counts? ")
@@ -732,7 +751,8 @@ while true; do
 					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 						PAYLOAD_DEL_CONFIG bluepinesuite total_scans
 						PAYLOAD_DEL_CONFIG bluepinesuite total_detected
-						total_scans=0; total_detected=0
+						PAYLOAD_DEL_CONFIG bluepinesuite total_scan_min
+						total_scans=0; total_detected=0; total_scan_min=0
 						LOG green "Total Scans + Detected cleared!"				
 						LOG "Press OK to continue..."
 						LOG " "
@@ -784,6 +804,11 @@ while true; do
 						scan_stealth=0
 						skip_ask_1st_scan=0
 						skip_ask_ringtones=0
+						filter_multilocal=0
+						filter_randomall=0
+						filter_localall=0
+						filter_multiall=0
+						filter_emptyoui=0
 						DATA_SCAN_SECONDS=7
 						custom_oui=""
 						custom_name=""
@@ -809,6 +834,11 @@ while true; do
 						PAYLOAD_SET_CONFIG bluepinesuite scan_stealth "$scan_stealth"
 						PAYLOAD_SET_CONFIG bluepinesuite skip_ask_1st_scan "$skip_ask_1st_scan"
 						PAYLOAD_SET_CONFIG bluepinesuite skip_ask_ringtones "$skip_ask_ringtones"
+						PAYLOAD_SET_CONFIG bluepinesuite filter_multilocal "$filter_multilocal"
+						PAYLOAD_SET_CONFIG bluepinesuite filter_randomall "$filter_randomall"
+						PAYLOAD_SET_CONFIG bluepinesuite filter_localall "$filter_localall"
+						PAYLOAD_SET_CONFIG bluepinesuite filter_multiall "$filter_multiall"
+						PAYLOAD_SET_CONFIG bluepinesuite filter_emptyoui "$filter_emptyoui"
 						PAYLOAD_SET_CONFIG bluepinesuite custom_oui "$custom_oui"
 						PAYLOAD_SET_CONFIG bluepinesuite custom_name "$custom_name"
 						LOG "Settings saved..."
@@ -867,13 +897,30 @@ while true; do
 					elif [[ "$submenu_option" -eq 4 ]]; then
 						LOG "Restore A + B LEDS...."
 						restore_ableds
+					elif [[ "$submenu_option" -eq 5 ]]; then
+						LOG "Backup / Restore Config & History...."
+						resp=$(CONFIRMATION_DIALOG "Backup Config & History?")
+						if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+							config_backup
+						else 
+							LOG "Skip Backup Config & History..."
+						fi
+						# check file has contents
+						if [[ -s "$SAVEDCONFIG_FILE" ]]; then
+							sleep 0.5
+							resp=$(CONFIRMATION_DIALOG "Restore Config & History?")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								config_restore
+							else 
+								LOG "Skip Restore Config & History..."
+							fi
+						fi
 					fi
 				done
 			fi
 		done
 	elif [[ "$main_option" -eq 9 ]]; then
 		LOG "Info...."
-		show_menu_end_OK=0
 		lootreports=$(find "$LOOT_SCAN" "$LOOT_DETECT" "$LOOT_PROBE" -maxdepth 1 -type f -name "Report*" -print | wc -l)
 		lootdetects=$(find "$LOOT_DETECT" -maxdepth 1 -type f -name "DetectTargets*" -print | wc -l)
 		loottargets=$(find "$LOOT_TARGETS" -maxdepth 1 -type f -name "SavedTargets_*" -print | wc -l)
@@ -882,6 +929,32 @@ while true; do
 		NAME_CHECK=$(hciconfig -a $BLE_IFACE | grep "Name:" | awk -F"'" '{print $2}')
 		target_count="${#BT_TARGETS[@]}"
 		saved_target_count="${#BT_TARGETS_SAVED[@]}"
+		filterCount=0; filterText=""
+		if [[ "$filter_multilocal" -eq 1 && "$filter_randomall" -eq 1 && "$filter_localall" -eq 1 && "$filter_multiall" -eq 1 && "$filter_emptyoui" -eq 1 ]] ; then
+			filterCount=1
+			filterText="ALL Filters Enabled"
+		else
+			if [[ "$filter_emptyoui" -eq 1 ]] ; then
+				filterCount=$((filterCount + 1))
+				if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, NoOUI"; else filterText="NoOUI"; fi
+			fi
+			if [[ "$filter_multilocal" -eq 1 ]] ; then
+				filterCount=$((filterCount + 1))
+				if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, Basic"; else filterText="Basic"; fi
+			fi
+			if [[ "$filter_multiall" -eq 1 ]] ; then
+				filterCount=$((filterCount + 1))
+				if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, ALL Mcast"; else filterText="ALL Mcast"; fi
+			fi
+			if [[ "$filter_localall" -eq 1 ]] ; then
+				filterCount=$((filterCount + 1))
+				if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, ALL Loc"; else filterText="ALL Loc"; fi
+			fi
+			if [[ "$filter_randomall" -eq 1 ]] ; then
+				filterCount=$((filterCount + 1))
+				if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, ALL Rand"; else filterText="ALL Rand"; fi
+			fi
+		fi
 		if [[ "$scan_privacy" -eq 1 ]] ; then MAC_CHECK="${MAC_CHECK:0:2}:░░:░░:░░:░░:░░"; NAME_CHECK="$priv_name_txt"; fi
 		LOG magenta "================================ Device Info ===="
 		LOG cyan "BT Device: $BLE_IFACE | MAC Address: $MAC_CHECK"
@@ -904,9 +977,26 @@ while true; do
 				LOG "GPS Last Pos.: $gps_formatted"
 			fi
 		fi
-
-		sleep 0.25
+		sleep 1
 		LOG magenta "================================== Scan Info ===="
+		if [[ "$total_scan_min" -gt 0 ]] ; then
+			if [[ "$total_scan_min" -ge 1440 ]] ; then
+				days=$((total_scan_min/1440)); hrs=$((total_scan_min%1440/60)); mins=$((total_scan_min%60))
+				if [[ "$total_scan_min" -ge 2880 ]] ; then
+					totalruntime_display="${days} days ${hrs} hr ${mins} min"
+				else
+					totalruntime_display="${days} day ${hrs} hr ${mins} min"
+				fi # echo "totalruntime_display: $totalruntime_display"
+			else
+				if [[ "$total_scan_min" -ge 60 ]] ; then
+					hrs=$((total_scan_min/60)); mins=$((total_scan_min%60))
+					totalruntime_display="${hrs} hr ${mins} min"
+				else
+					totalruntime_display="${total_scan_min} min"
+				fi
+			fi
+			LOG cyan "Total Scantime: ${totalruntime_display}"
+		fi
 		LOG cyan "Total Scans: $total_scans | Malicious Items Found: $total_detected"
 		LOG "Current ${text_target_UC}s: $target_count | Saved ${text_target_UC}s: $saved_target_count"
 		if [[ -n "$target_mac" ]]; then
@@ -921,7 +1011,7 @@ while true; do
 				priv_mac_save="$custom_oui"
 				priv_name_save="$custom_name"
 				custom_oui="${custom_oui:0:2}:░░:░░"
-				custom_name="$priv_name_txt"
+				custom_name="-+ Hidden +-"
 			fi
 			if [[ -n "$custom_name" ]] ; then
 				LOG "${text_target_UC} OUI: $custom_oui | Custom Name: $custom_name"
@@ -932,7 +1022,7 @@ while true; do
 		else
 			LOG "Custom OUI/Name not set"
 		fi
-		sleep 0.25
+		sleep 2
 		LOG magenta "============================== Scan Settings ===="
 		if [[ "$scan_btclassic" == "true" ]] && [[ "$scan_btle" == "true" ]] ; then
 			LOG cyan "Scan Classic + LE Bluetooth for ${DATA_SCAN_SECONDS}s each"
@@ -950,14 +1040,14 @@ while true; do
 			LOG "Repeat: $scan_infrepeat | Sound Effects: Off | Debug: $scan_debug"
 		fi
 		LOG "Stealth Mode: $scan_stealth | Privacy: $scan_privacy | Friendly: $scan_friendly"
+		if [[ "$filterCount" -gt 0 ]] ; then
+			LOG "Filter(s): ${filterText}"
+		else
+			LOG blue "Scan Filters: Disabled"
+		fi
 		# LOG magenta "======================================= Info ===="
-		sleep 3
+		sleep 1
 		LOG magenta "= Press OK to Return to Main Menu... == Info ===="
-		WAIT_FOR_BUTTON_PRESS A
-		LOG " "
-	fi
-	if [[ "$show_menu_end_OK" -eq 2 ]] ; then
-		LOG green "Press OK to Return to Main Menu..."
 		WAIT_FOR_BUTTON_PRESS A
 		LOG " "
 	fi
