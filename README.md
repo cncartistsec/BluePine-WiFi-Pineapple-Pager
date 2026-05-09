@@ -20,6 +20,9 @@ MAC details and device names are hidden in the images below due to "Privacy Mode
 # Prompts/Configuration
 ![Prompts/Configuration](images/BT-bluepine-prompts.jpg)
 
+# MAC Filtering
+![MAC Filtering](images/BT-bluepine-filters.jpg)
+
 # Saved Target Loading + Save/Load File
 ![BluePine Saved Target Loading + Save/Load File](images/BT-bluepine-saveload.jpg)
 
@@ -36,7 +39,7 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 # Author: cncartist
 # Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.2
+# Version: 1.3
 # 
 # ============================================
 # Acknowledgements: 
@@ -50,6 +53,7 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 # Fuzz_Finder - Author: OSINTI4L - (Axon OUIs)
 # https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE/tree/main - (CC Skimmer Data)
 # https://github.com/colonelpanichacks/flock-you/tree/main - (Flock OUIs + Names)
+# StamenScan - Author: FusedStamen - https://github.com/FusedStamen/StamenScan/tree/main - (MAC filter idea)
 # 
 # ============================================
 # Includes: 
@@ -58,6 +62,7 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 #  -- -- -- Hunt via Scanning All, Single MAC, OUI prefix, and/or Name.
 #  -- -- -- RSSI meter for each found signal, best signal showing at the bottom of the screen.
 #  -- -- -- Custom configuration allowed and data builds over time in case name or manufacturer is missed on first scans.
+#  -- -- -- Filters allowed, remove MAC addresses from scan that match Multicast/Random/Locally Administered.
 #  -- -- -- Verbose logging / debugging available, GPS coordinate logging if GPS device enabled.
 #  -- Bluetooth Device Detection: 
 #  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / USB Kill / WiFi Pineapple BT Scanner.
@@ -127,6 +132,15 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 #  -- -- -- The best way to get used to the sensitivity is to scan for known devices and locate them within close range to see the sensitivity received.
 #  -- -- -- There are many factors in Bluetooth sensitivity; walls & windows bounce or weaken signal, desks/objects can weaken signal, orientation of the pager can matter, and signals can look weak until you get closer to the actual source/Bluetooth chip on the target device. 
 #  -- -- -- Using an external USB CSR8510 / CSR v4.0 Bluetooth Adapter, you can achieve better sensitivity and range.
+#  -- -- -- Filters: 
+#  -- -- -- -- - Filters act on the first Octet of a MAC (12:), or the MAC OUI/first 6 digits (12:34:56)
+#  -- -- -- -- - Adding Filters allows faster processing, removes Targets from results, and helps if you know which MACs you are searching for.
+#  -- -- -- -- - OUI: Empty OUI (00:00:00)
+#  -- -- -- -- - Basic: Multicast (Group) 01 & Locally Administered (Unicast) 02
+#  -- -- -- -- - Multi: ALL Multicast (01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF)
+#  -- -- -- -- - Multi: ALL Locally Administered (x2, x6, xA, xE)
+#  -- -- -- -- - Multi: ALL Random (x3, x7, xB, xF)
+#  -- -- -- -- - WARNING: Filters REMOVE real devices from report/display and only applies to non-targeted scans!
 #  -- Bluetooth Jammer Detector & Locator:
 #  -- -- -- "Jam" counter resets every 25 "nojams" to clean out errors, and the "Found" counter will only count true confirmed jams in the area.
 #  -- -- -- Confirmed jams are calculated at 5 jams per 25 scans.
@@ -194,9 +208,15 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 # warning       DETECT FOUND ITEMS
 # ScaleTrill    DETECT FOUND NONE
 # ============================================
+#            Version History
+# ============================================
+# v1.3 -- Filtering Options + Scantime Tracking
+# v1.2 -- GPS Updates + Bug Fixes
+# v1.1 -- Configuration Saving + Added Functionality
+# v1.0 -- Initial Release
+# ============================================
 #          Future improvements
 # ============================================
-# text switch for how many targets found in session or detected
 # build log viewer in?
 # change actual sound setting for system/alerts?
 # implement sql lite db instead of current method?
