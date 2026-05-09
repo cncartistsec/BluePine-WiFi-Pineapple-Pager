@@ -1,7 +1,7 @@
 #!/bin/bash
 # Menu Functions for BluePine
 # Author: cncartist
-# Version: 1.2
+# Version: 1.3
 # 
 # check_dependencies
 # check_ringtones
@@ -19,6 +19,12 @@
 # privacy_config
 # stealth_config
 # restore_ableds
+# filter_config
+# multilocal_config
+# randomall_config
+# localall_config
+# multiall_config
+# emptyoui_config
 # 
 # enter_custom_name
 # enter_custom_oui
@@ -345,6 +351,11 @@ global_config() {
 		scan_mute="false"
 		scan_debug="false"
 		skip_ask_1st_scan=0
+		filter_multilocal=0
+		filter_randomall=0
+		filter_localall=0
+		filter_multiall=0
+		filter_emptyoui=0
 		# DONE = SET HERE - Custom config for quick scans
 		
 		LOG green "Default settings selected..."	
@@ -378,6 +389,11 @@ global_config() {
 		else
 			LOG cyan " - Ask to Save Results after 1st Scan Disabled"
 		fi
+		if [[ "$filter_multilocal" -eq 1 || "$filter_randomall" -eq 1 || "$filter_localall" -eq 1 || "$filter_multiall" -eq 1 || "$filter_emptyoui" -eq 1 ]] ; then
+			LOG cyan " - Filter(s) Enabled"
+		else
+			LOG cyan " - Filter(s) Disabled"
+		fi
 		
 		# save config
 		PAYLOAD_SET_CONFIG bluepinesuite DATA_SCAN_SECONDS "$DATA_SCAN_SECONDS"
@@ -387,6 +403,11 @@ global_config() {
 		PAYLOAD_SET_CONFIG bluepinesuite scan_mute "$scan_mute"
 		PAYLOAD_SET_CONFIG bluepinesuite scan_debug "$scan_debug"
 		PAYLOAD_SET_CONFIG bluepinesuite skip_ask_1st_scan "$skip_ask_1st_scan"
+		PAYLOAD_SET_CONFIG bluepinesuite filter_multilocal "$filter_multilocal"
+		PAYLOAD_SET_CONFIG bluepinesuite filter_randomall "$filter_randomall"
+		PAYLOAD_SET_CONFIG bluepinesuite filter_localall "$filter_localall"
+		PAYLOAD_SET_CONFIG bluepinesuite filter_multiall "$filter_multiall"
+		PAYLOAD_SET_CONFIG bluepinesuite filter_emptyoui "$filter_emptyoui"
 		
 		LOG "Settings saved..."
 		LOG green "Configuration complete!"
@@ -402,9 +423,12 @@ global_config() {
 		sleep 1
 		scantype_config
 		infscan_config
+		LOG " "
 		mute_config
 		debug_config
 		skip_ask_config
+		filter_config
+		LOG " "
 		LOG "Settings saved..."
 		LOG green "Configuration complete!"
 	fi
@@ -456,7 +480,6 @@ infscan_config() {
 		LOG "Infinite Scan Disabled..."
 	fi
 	PAYLOAD_SET_CONFIG bluepinesuite scan_infrepeat "$scan_infrepeat"
-	LOG " "
 }
 mute_config() {
 	# Confirm Mute
@@ -572,6 +595,200 @@ restore_ableds() {
 		fi
 		LOG " "
 	fi
+}
+
+# configure filters
+filter_config() {
+	local filters_disabled=0
+	local filterText=""
+	
+	if [[ "$filter_multilocal" -eq 1 || "$filter_randomall" -eq 1 || "$filter_localall" -eq 1 || "$filter_multiall" -eq 1 || "$filter_emptyoui" -eq 1 ]] ; then
+		if [[ "$filter_multilocal" -eq 1 && "$filter_randomall" -eq 1 && "$filter_localall" -eq 1 && "$filter_multiall" -eq 1 && "$filter_emptyoui" -eq 1 ]] ; then
+			LOG blue "================================================="
+			LOG cyan "Filters Currently Removing MACs with:"
+			LOG blue "================================================="
+			LOG "First Octet Matching: 01, 02, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
+			LOG blue "================================================="
+			LOG "First Octet Matching (x = Wildcard): x2, x3, x6, x7, xA, xB, xE, xF"
+			LOG blue "================================================="
+			LOG "OUI Matching: '00:00:00'"
+			LOG blue "================================================="
+			
+			PROMPT "Filters Currently Removing MACs with:
+			
+			
+			First Octet Matching: 01, 02, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF
+			
+			First Octet Matching (x = Wildcard):
+			x2, x3, x6, x7, xA, xB, xE, xF
+			
+			OUI Matching: '00:00:00'"
+		else
+			LOG blue "================================================="
+			LOG cyan "Filters Currently Removing MACs with:"
+			LOG blue "================================================="
+			filterText="Filters Currently Removing MACs with:
+			"
+			if [[ "$filter_multilocal" -eq 1 && "$filter_multiall" -eq 1 ]] ; then
+				LOG "First Octet Matching: 01, 02, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
+				LOG blue "================================================="
+				filterText="${filterText}
+				
+				First Octet Matching: 01, 02, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
+			else
+				if [[ "$filter_multilocal" -eq 1 ]] ; then
+					LOG "First Octet Matching: 01, 02"
+					LOG blue "================================================="
+					filterText="${filterText}
+					
+					First Octet Matching: 01, 02"
+				fi
+				if [[ "$filter_multiall" -eq 1 ]] ; then
+					LOG "First Octet Matching: 01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
+					LOG blue "================================================="
+					filterText="${filterText}
+					
+					First Octet Matching: 01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
+				fi
+			fi
+			if [[ "$filter_localall" -eq 1 && "$filter_randomall" -eq 1 ]] ; then
+				LOG "First Octet Matching (x = Wildcard): x2, x3, x6, x7, xA, xB, xE, xF"
+				LOG blue "================================================="
+				filterText="${filterText}
+				
+				First Octet Matching (x = Wildcard):
+				x2, x3, x6, x7, xA, xB, xE, xF"
+			else
+				if [[ "$filter_localall" -eq 1 ]] ; then
+					LOG "First Octet Matching (x = Wildcard): x2, x6, xA, xE"
+					LOG blue "================================================="
+					filterText="${filterText}
+					
+					First Octet Matching (x = Wildcard):
+					x2, x6, xA, xE"
+				fi
+				if [[ "$filter_randomall" -eq 1 ]] ; then
+					LOG "First Octet Matching (x = Wildcard): x3, x7, xB, xF"
+					LOG blue "================================================="
+					filterText="${filterText}
+					
+					First Octet Matching (x = Wildcard):
+					x3, x7, xB, xF"
+				fi
+			fi
+			if [[ "$filter_emptyoui" -eq 1 ]] ; then
+				LOG "OUI Matching: '00:00:00'"
+				LOG blue "================================================="
+				filterText="${filterText}
+				
+				OUI Matching: '00:00:00'"
+			fi
+			PROMPT "$filterText"
+		fi
+		
+		resp=$(CONFIRMATION_DIALOG "Filter(s) currently Enabled!
+		
+		Disable All Filters for Device ${text_hunt_UC}er Scan, allowing all ${text_target_UC}s/MACs to be visible again?")
+		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+			filters_disabled=1
+			LOG "Disabling All Filters..."
+			filter_multilocal=0
+			filter_randomall=0
+			filter_localall=0
+			filter_multiall=0
+			filter_emptyoui=0
+			PAYLOAD_SET_CONFIG bluepinesuite filter_multilocal "$filter_multilocal"
+			PAYLOAD_SET_CONFIG bluepinesuite filter_randomall "$filter_randomall"
+			PAYLOAD_SET_CONFIG bluepinesuite filter_localall "$filter_localall"
+			PAYLOAD_SET_CONFIG bluepinesuite filter_multiall "$filter_multiall"
+			PAYLOAD_SET_CONFIG bluepinesuite filter_emptyoui "$filter_emptyoui"
+		else
+			LOG "Skipped Disabling Filters..."
+		fi
+	fi
+	if [[ "$filters_disabled" -eq 0 ]] ; then
+		resp=$(CONFIRMATION_DIALOG "Modify Filters for Device ${text_hunt_UC}er Scan?
+		
+		Adding Filters allows faster processing, removes ${text_target_LC}s from results, and helps if you know which MACs you are searching for.
+		
+		WARNING: Filters REMOVE real ${text_target_LC}s from report/display and only applies to non-targeted scans!")
+		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+			LOG "Modifying Filters..."
+			emptyoui_config
+			multilocal_config
+			multiall_config
+			localall_config
+			randomall_config
+		else
+			LOG "Skipped Modifying Filters..."
+		fi
+	fi
+	settings_check
+}
+multilocal_config() {
+	resp=$(CONFIRMATION_DIALOG "Basic Filter:
+	
+	Remove Multicast (01) & Locally Administered (02) MACs?")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		filter_multilocal=1
+		LOG "Filter Multicast/Locally Admin. Enabled..."
+	else
+		filter_multilocal=0
+		LOG "Filter Multicast/Locally Admin. Disabled..."
+	fi
+	PAYLOAD_SET_CONFIG bluepinesuite filter_multilocal "$filter_multilocal"
+}
+emptyoui_config() {
+	resp=$(CONFIRMATION_DIALOG "OUI Filter:
+	
+	Remove Empty OUI (00:00:00) MACs?")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		filter_emptyoui=1
+		LOG "Filter Empty OUI (00:00:00) Enabled..."
+	else
+		filter_emptyoui=0
+		LOG "Filter Empty OUI (00:00:00) Disabled..."
+	fi
+	PAYLOAD_SET_CONFIG bluepinesuite filter_emptyoui "$filter_emptyoui"
+}
+randomall_config() {
+	resp=$(CONFIRMATION_DIALOG "Multi Filter:
+	
+	Remove ALL Random (x3, x7, xB, xF) MACs?")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		filter_randomall=1
+		LOG "Filter ALL Random Enabled..."
+	else
+		filter_randomall=0
+		LOG "Filter ALL Random Disabled..."
+	fi
+	PAYLOAD_SET_CONFIG bluepinesuite filter_randomall "$filter_randomall"
+}
+localall_config() {
+	resp=$(CONFIRMATION_DIALOG "Multi Filter:
+	
+	Remove ALL Locally Administered (x2, x6, xA, xE) MACs?")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		filter_localall=1
+		LOG "Filter ALL Locally Admin. Enabled..."
+	else
+		filter_localall=0
+		LOG "Filter ALL Locally Admin. Disabled..."
+	fi
+	PAYLOAD_SET_CONFIG bluepinesuite filter_localall "$filter_localall"
+}
+multiall_config() {
+	resp=$(CONFIRMATION_DIALOG "Multi Filter:
+	
+	Remove ALL Multicast (01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF) MACs?")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		filter_multiall=1
+		LOG "Filter ALL Multicast Enabled..."
+	else
+		filter_multiall=0
+		LOG "Filter ALL Multicast Disabled..."
+	fi
+	PAYLOAD_SET_CONFIG bluepinesuite filter_multiall "$filter_multiall"
 }
 
 enter_custom_oui() {
@@ -970,7 +1187,7 @@ sub_menu_preferences() {
 	MENU_ITEMS[3]="Sound"
 	MENU_ITEMS[4]="Debug Mode"
 	MENU_ITEMS[5]="Stealth Mode / Disable LEDS"
-	MENU_ITEMS[6]="Backup / Restore Config & History"
+	MENU_ITEMS[6]="Device ${text_hunt_UC}er Scan Filter Config"
 	MENU_ITEMS[7]="Clear History / Data / Settings"
 	MENU_ITEMS[8]="Extra"
 	
@@ -1080,6 +1297,7 @@ sub_sub_menu_extra() {
 	MENU_ITEMS[2]="Friendly Mode"
 	MENU_ITEMS[3]="Skip Asking to Save Results after 1st Scan"
 	MENU_ITEMS[4]="Restore A + B LEDS"
+	MENU_ITEMS[5]="Backup / Restore Config & History"
 	
 	local maxarritems=$(( ${#MENU_ITEMS[@]} - 1 ))
 	local defaultselnum=1
@@ -1113,6 +1331,7 @@ sub_sub_menu_extra() {
 		"${MENU_ITEMS[2]}") selnum=2 ;;
 		"${MENU_ITEMS[3]}") selnum=3 ;;
 		"${MENU_ITEMS[4]}") selnum=4 ;;
+		"${MENU_ITEMS[5]}") selnum=5 ;;
 		"${MENU_ITEMS[0]}") selnum=0 ;;
 		*)
 		selnum=0 # LOG "Cancel pressed or unknown"
