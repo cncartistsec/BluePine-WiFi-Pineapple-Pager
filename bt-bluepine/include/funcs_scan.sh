@@ -1,7 +1,7 @@
 #!/bin/bash
 # Scan Functions for BluePine
 # Author: cncartist
-# Version: 1.2
+# Version: 1.3
 # 
 # reset_bt_adapter
 # rssitxtsw_hci0
@@ -187,6 +187,8 @@ device_hunter() {
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]]; then
 		scantime_config
 		scantype_config
+		infscan_config
+		filter_config
 	else
 		sleep 1 # give time for GPS_GET to catchup
 	fi
@@ -211,6 +213,16 @@ device_hunter() {
 		local gps_disptxt=""
 		local gps_same_count=0
 		local show_header_extra=0
+		local filters_enabled=0
+		local filterCount=0
+		local filterText=""
+		local totalmin=0
+		local runtime=0
+		local totalruntime=0
+		local totalruntime_display=""
+		local origtargcount="${#BT_TARGETS[@]}"
+		local newtargcount=0
+		local newfoundcount=0
 		
 		# set on each total run
 		cancel_app=0
@@ -234,6 +246,34 @@ device_hunter() {
 		LOG blue "================================================="
 		LOG cyan "========= Bluetooth Device ${text_hunt_UC}er Scan =========="
 		
+		if [[ "$filter_multilocal" -eq 1 || "$filter_randomall" -eq 1 || "$filter_localall" -eq 1 || "$filter_multiall" -eq 1 || "$filter_emptyoui" -eq 1 ]] && [[ "$scan_custom" -eq 0 && "$scan_targeted" == "false" ]] ; then
+			filters_enabled=1
+			if [[ "$filter_multilocal" -eq 1 && "$filter_randomall" -eq 1 && "$filter_localall" -eq 1 && "$filter_multiall" -eq 1 && "$filter_emptyoui" -eq 1 ]] ; then
+				filterCount=1
+				filterText="ALL Filters Enabled"
+			else
+				if [[ "$filter_emptyoui" -eq 1 ]] ; then
+					filterCount=$((filterCount + 1))
+					if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, NoOUI"; else filterText="NoOUI"; fi
+				fi
+				if [[ "$filter_multilocal" -eq 1 ]] ; then
+					filterCount=$((filterCount + 1))
+					if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, Basic"; else filterText="Basic"; fi
+				fi
+				if [[ "$filter_multiall" -eq 1 ]] ; then
+					filterCount=$((filterCount + 1))
+					if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, ALL Mcast"; else filterText="ALL Mcast"; fi
+				fi
+				if [[ "$filter_localall" -eq 1 ]] ; then
+					filterCount=$((filterCount + 1))
+					if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, ALL Loc"; else filterText="ALL Loc"; fi
+				fi
+				if [[ "$filter_randomall" -eq 1 ]] ; then
+					filterCount=$((filterCount + 1))
+					if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, ALL Rand"; else filterText="ALL Rand"; fi
+				fi
+			fi
+		fi
 
 		if [[ "$scan_custom" -eq 1 ]] ; then
 			printf "  %s Custom OUI/Name - Report\n" "${text_hunt_UC}" >> "$REPORT_FILE"
@@ -286,26 +326,36 @@ device_hunter() {
 			RINGTONE "glitchHack"
 		fi
 		if [[ "$scan_debug" == "true" ]] ; then
-			LOG magenta "DEBUG mode / extra logging ACTIVATED"
+			LOG magenta "DEBUG Mode / Extra Logging ACTIVATED"
 		fi
+		if [[ "$filterCount" -gt 0 && "$scan_custom" -eq 0 && "$scan_targeted" == "false" ]] ; then 
+			LOG blue "======================================= NOTICE =="
+			LOG "Filters WILL REMOVE Real ${text_target_UC}s from Results"
+			LOG red "Filter(s) ON: ${filterText}"
+			LOG blue "======================================= NOTICE =="
+			printf "Filter(s) ON: %s\n" "${filterText}" >> "$REPORT_FILE"
+		elif [[ "$filterCount" -eq 0 && "$scan_custom" -eq 0 && "$scan_targeted" == "false" ]]; then
+			LOG cyan "No Filters Enabled, All ${text_target_UC}s Shown"
+		fi
+		
 		if [[ "$scan_btclassic" == "true" && "$scan_btle" == "true" ]] ; then
-			LOG cyan "Scanning Classic + LE Bluetooth for ${DATA_SCAN_SECONDS}s each."
+			LOG cyan "Scanning Classic + LE Bluetooth for ${DATA_SCAN_SECONDS}s each"
 			printf "Scanning Classic + LE Bluetooth for %s seconds each.\n" "${DATA_SCAN_SECONDS}" >> "$REPORT_FILE"
 		else 
 			if [[ "$scan_btclassic" == "true" ]] ; then
-				LOG cyan "Scanning Classic Bluetooth for ${DATA_SCAN_SECONDS}s."
+				LOG cyan "Scanning Classic Bluetooth for ${DATA_SCAN_SECONDS}s"
 				printf "Scanning Classic Bluetooth for %s seconds.\n" "${DATA_SCAN_SECONDS}" >> "$REPORT_FILE"
 			fi
 			if [[ "$scan_btle" == "true" ]] ; then
-				LOG cyan "Scanning LE Bluetooth for ${DATA_SCAN_SECONDS}s."
+				LOG cyan "Scanning LE Bluetooth for ${DATA_SCAN_SECONDS}s"
 				printf "Scanning LE Bluetooth for %s seconds.\n" "${DATA_SCAN_SECONDS}" >> "$REPORT_FILE"
 			fi
 		fi
 		sleep 1 # give time for GPS_GET to catchup
 		if [[ "$scan_infrepeat" -eq 1 ]] ; then
-			LOG "Scanning... Press OK to pause/stop."
+			LOG "Scanning... Press OK to pause/stop..."
 		else
-			LOG "Scanning... Press BACK to stop."
+			LOG "Scanning... Press BACK to stop..."
 		fi
 		sleep 1 # give time for GPS_GET to catchup
 		
@@ -321,6 +371,7 @@ device_hunter() {
 		
 		while true; do
 		
+			start=$SECONDS
 			scannumber=$((scannumber + 1))
 			reset_bt_adapter
 			
@@ -498,11 +549,75 @@ device_hunter() {
 				
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED GREEN; fi
 			
-				# clean up output file via temp file addresses
 				# allow single OUI search
 				if [[ "$scan_custom" -eq 1 && -n "$custom_oui" && -z "$custom_name" ]] ; then
 					checkouionly=1
 				fi
+				
+				# run filters
+				if [[ "$filters_enabled" -eq 1 ]] ; then
+					# remove empty oui MACs if user chooses, only if non custom/target scan
+					if [[ "$filter_emptyoui" -eq 1 ]] ; then 
+						# add extra lines at end of file
+						printf "\n\n\n" >> "$DATASTREAMBT_FILE"
+						# remove empty
+						sed -i '/Address: 00:00:00/ {d};' "$DATASTREAMBT2_FILE"
+						sed -i '/Address: 00:00:00/ {N;N;N;d};' "$DATASTREAMBT_FILE"
+					fi
+					
+					# Multicast (Group) 01
+					# Locally Administered (Unicast) 02
+					# remove basic multicast & locally administered if user chooses, only if non custom/target scan
+					if [[ "$filter_multilocal" -eq 1 ]] ; then 
+						# add extra lines at end of file
+						printf "\n\n\n" >> "$DATASTREAMBT_FILE"
+						# remove basic
+						sed -i '/Address: 01/ {d}; /Address: 02/ {d};' "$DATASTREAMBT2_FILE"
+						sed -i '/Address: 01/ {N;N;N;d}; /Address: 02/ {N;N;N;d};' "$DATASTREAMBT_FILE"
+					fi
+					
+					# ALL Multicast (Local Multi) 01, 03, 05, 07, 09, 0B, 0D, 0F, 11 (and any other odd number), FF (Broadcast address)
+					# remove ALL known multicast MACs if user chooses, only if non custom/target scan
+					if [[ "$filter_multiall" -eq 1 ]] ; then 
+						# add extra lines at end of file
+						printf "\n\n\n" >> "$DATASTREAMBT_FILE"
+						# remove multicast
+						sed -i '/Address: 01/ {d}; /Address: 03/ {d}; /Address: 05/ {d}; /Address: 07/ {d}; /Address: 09/ {d}; /Address: 0B/ {d}; /Address: 0b/ {d}; /Address: 0D/ {d}; /Address: 0d/ {d}; /Address: 0F/ {d}; /Address: 0f/ {d}; /Address: FF/ {d}; /Address: ff/ {d};' "$DATASTREAMBT2_FILE"
+						sed -i '/Address: 01/ {N;N;N;d}; /Address: 03/ {N;N;N;d}; /Address: 05/ {N;N;N;d}; /Address: 07/ {N;N;N;d}; /Address: 09/ {N;N;N;d}; /Address: 0B/ {N;N;N;d}; /Address: 0b/ {N;N;N;d}; /Address: 0D/ {N;N;N;d}; /Address: 0d/ {N;N;N;d}; /Address: 0F/ {N;N;N;d}; /Address: 0f/ {N;N;N;d}; /Address: FF/ {N;N;N;d}; /Address: ff/ {N;N;N;d};' "$DATASTREAMBT_FILE"
+						# remove 11 (and any other odd number)
+						sed -i -E '/Address: ([1-9][13579])/ {d};' "$DATASTREAMBT2_FILE"
+						sed -i -E '/Address: ([1-9][13579])/ {N;N;N;d};' "$DATASTREAMBT_FILE"
+					fi
+					
+					# ALL Locally Administered (Unicast) x2, x6, xA, xE
+					# remove ALL known locally administered MACs if user chooses, only if non custom/target scan
+					if [[ "$filter_localall" -eq 1 ]] ; then 
+						# add extra lines at end of file
+						printf "\n\n\n" >> "$DATASTREAMBT_FILE"
+						# remove local admin MACs (x2, x6, xA, xE...)
+						sed -i -E '/Address: .[26AaEe]/ {d};' "$DATASTREAMBT2_FILE"
+						sed -i -E '/Address: .[26AaEe]/ {N;N;N;d};' "$DATASTREAMBT_FILE"
+					fi
+					
+					# ALL Random (Local Multi) x3, x7, xB, xF
+					# remove ALL known randomized MACs if user chooses, only if non custom/target scan
+					if [[ "$filter_randomall" -eq 1 ]] ; then 
+						# add extra lines at end of file
+						printf "\n\n\n" >> "$DATASTREAMBT_FILE"
+						# remove randomized MACs (x3, x7, xB, xF...)
+						sed -i -E '/Address: .[37BbFf]/ {d};' "$DATASTREAMBT2_FILE"
+						sed -i -E '/Address: .[37BbFf]/ {N;N;N;d};' "$DATASTREAMBT_FILE"
+					fi
+				fi
+				
+				# clean file blank lines with awk, input > output
+				awk '/^[[:space:]]*$/ {blank++; if (blank<=3) print; next} {print; blank=0}' "$DATASTREAMBT_FILE" > "outputtmp.txt"
+				mv "outputtmp.txt" "$DATASTREAMBT_FILE"
+				# if [[ "$scan_debug" == "true" ]] ; then
+				# 	cp "$DATASTREAMBT_FILE" "$LOOT_SCAN/${TIMESTAMP}_scan_${scannumber}_FILT.txt"
+				# fi
+				
+				# clean up output file via temp file addresses
 				# check if target_mac is set and filter file for only 1 mac address
 				if [[ "$checkouionly" -eq 1 ]] || [[ -n "$target_mac" && "$scan_targeted" == "true" ]] ; then
 					if [[ "$scan_custom" -eq 1 ]] ; then
@@ -543,9 +658,7 @@ device_hunter() {
 							# keeping enough groups to get "sweet spot" of data collection
 							# too many to keep makes file to process too large
 							# too little means likely missed data
-							
 							if [[ "$scan_infrepeat" -eq 1 ]] ; then check_cancel; if [[ "$cancel_app" -eq 1 ]]; then break; fi fi
-							
 							awk -v pattern="Address: $mac" '
 								$0 ~ pattern {  # If the current line matches the pattern
 									count++
@@ -998,6 +1111,8 @@ device_hunter() {
 			fi
 			
 			# set scan values
+			runtime=$((SECONDS-start))
+			totalruntime=$((totalruntime+runtime))
 			total_scans=$((total_scans + 1))
 			PAYLOAD_SET_CONFIG bluepinesuite total_scans "$total_scans"
 			
@@ -1116,14 +1231,73 @@ device_hunter() {
 			if [[ "$scan_infrepeat" -eq 1 ]] ; then check_cancel; if [[ "$cancel_app" -eq 1 ]]; then break; fi fi
 			
 		done
+		
+		
 		killall hcitool 2>/dev/null
 		killall btmon 2>/dev/null
 		killall evtest 2>/dev/null
 		rm "$KEYCKTMP_FILE" 2>/dev/null
 		
+		LOG cyan "================= Scan Results =================="
+		if [[ "$totalruntime" -gt 60 ]] ; then 
+			totalmin=$((totalruntime/60)); secs=$((totalruntime%60))
+			if [[ "$secs" -gt 34 ]] ; then totalmin=$((totalmin+1)); fi
+		else
+			if [[ "$totalruntime" -gt 34 ]] ; then totalmin=1; fi
+		fi
+		newtargcount="${#BT_TARGETS[@]}"		
+		newfoundcount=$((newtargcount-origtargcount))
+			
+		if [[ "$totalruntime" -ge 86400 ]] ; then
+			days=$((totalruntime/86400)); hrs=$((totalruntime%86400/3600)); mins=$((totalruntime%3600/60))
+			if [[ "$totalruntime" -ge 172800 ]] ; then
+				totalruntime_display="${days} days ${hrs} hr ${mins} min"
+			else
+				totalruntime_display="${days} day ${hrs} hr ${mins} min"
+			fi # echo "totalruntime_display: $totalruntime_display"
+		else
+			if [[ "$totalruntime" -ge 3600 ]] ; then
+				hrs=$((totalruntime/3600)); mins=$((totalruntime%3600/60))
+				totalruntime_display="${hrs} hr ${mins} min"
+			else
+				if [[ "$totalruntime" -ge 60 ]] ; then
+					mins=$((totalruntime/60)); secs=$((totalruntime%60))
+					if [[ "$mins" -gt 9 ]] ; then
+						totalruntime_display="${mins} min"
+					else
+						totalruntime_display="${mins} min ${secs}s"
+					fi
+				else
+					totalruntime_display="${totalruntime}s"
+				fi
+			fi
+		fi
+		LOG "Total Scantime: ${totalruntime_display}"
+		if [[ "$scannumber" -gt 1 ]] ; then
+			scannumberShow=$((scannumber-1))
+		fi
+		if [[ "$newfoundcount" -gt 0 ]] ; then
+			if [[ "$scannumberShow" -gt 1 ]] ; then
+				LOG "${newfoundcount} Unique ${text_target_UC}(s) Found in ${scannumberShow} Scans!"
+			else
+				LOG "${newfoundcount} Unique ${text_target_UC}(s) Found in ${scannumberShow} Scan!"
+			fi
+		else
+			LOG red "No Unique ${text_target_UC}s Found in ${scannumberShow} Scan(s)"
+		fi
+		LOG blue "================= Scan Results =================="
+		# time to view results
+		sleep 3
+		
+		# set scan values 
+		total_scan_min=$((total_scan_min + totalmin))
+		PAYLOAD_SET_CONFIG bluepinesuite total_scan_min "$total_scan_min"
+		
 		# restore default scan settings before returning in case they were changed
 		scan_btle="$hold_scan_btle"
 		scan_btclassic="$hold_scan_btclassic"
+		
+		
 		if [[ "${#BT_TARGETS[@]}" -gt 0 ]] ; then
 			# ask if they want to add results after scans completed
 			resp=$(CONFIRMATION_DIALOG "Do you want to add results to Saved ${text_target_UC}s?")
@@ -1223,12 +1397,7 @@ detect_bt_classic() {
 		# add extra lines to file
 		printf "\n\n\n\n" >> "$DATASTREAMBTTMP_FILE"
 		
-		# removing pineapple pager reading itself as an item via hardware info
-			# still allows it to detect other interface if enabled
-			# test with discoverable pineapple pager to see where it shows up
-			# hciconfig -a # show status
-			# hciconfig hci0 up piscan # make discoverable
-			# hciconfig hci0 up noscan # turn off discoverable
+		# correct pineapple pager reading its own address/device via hardware info
 		# remove these lines and two after # sed -i '/PATTERN/,+2d' "$DATASTREAMBTTMP_FILE"
 		sed -i '
 		/BR\/EDR Address:/ {d}; 
@@ -1482,6 +1651,10 @@ scan_detection() {
 	local searchCount=0
 	local btcl_searchCount=0
 	local btle_searchCount=0
+	local totalmin=0
+	local runtime=0
+	local totalruntime=0
+	local totalruntime_display=""
 	
 	# set on each total run
 	gpspos_last=""
@@ -1619,11 +1792,12 @@ scan_detection() {
 
 		if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
 		if [[ "$scan_debug" == "true" ]] ; then
-			LOG magenta "DEBUG mode / extra logging ACTIVATED"
+			LOG magenta "DEBUG Mode / Extra Logging ACTIVATED"
 		fi
 		sleep 2 # give time for GPS_GET to catchup
 		
 		while true; do
+			start=$SECONDS
 			detections=0
 			scannumber=$((scannumber + 1))
 			
@@ -1722,13 +1896,16 @@ scan_detection() {
 			printf "%s - EVENT: Complete scan #%s\n" "$(date +"%Y-%m-%d_%H%M%S")" "${scannumber}" >> "$REPORT_DETECT_FILE"
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			
+			# set scan values
+			runtime=$((SECONDS-start))
+			totalruntime=$((totalruntime+runtime))
+			total_scans=$((total_scans + 1))
 			# LOG blue "-------------------------------------------"
 			# LOG " "
 			LOG green "Press OK to continue..."
 			LOG " "
 			WAIT_FOR_BUTTON_PRESS A
 			
-			total_scans=$((total_scans + 1))
 			rm "$DATASTREAMBT_FILE" 2>/dev/null
 			rm "$DATASTREAMBT2_FILE" 2>/dev/null
 			rm "$DATASTREAMBT3_FILE" 2>/dev/null
@@ -1743,7 +1920,13 @@ scan_detection() {
 			printf "Scanning again...\n" >> "$REPORT_DETECT_FILE"
 		done
 		
-
+		if [[ "$totalruntime" -gt 60 ]] ; then 
+			totalmin=$((totalruntime/60)); secs=$((totalruntime%60))
+			if [[ "$secs" -gt 34 ]] ; then totalmin=$((totalmin+1)); fi
+		else
+			if [[ "$totalruntime" -gt 34 ]] ; then totalmin=1; fi
+		fi
+		
 		# finished
 		if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
 		LOG green "Detection Scan(s) Completed!"
@@ -1762,6 +1945,8 @@ scan_detection() {
 			printf "No malicious suspects found!\n" >> "$REPORT_DETECT_FILE"
 		fi		
 		# set scan values
+		total_scan_min=$((total_scan_min + totalmin))
+		PAYLOAD_SET_CONFIG bluepinesuite total_scan_min "$total_scan_min"
 		PAYLOAD_SET_CONFIG bluepinesuite total_scans "$total_scans"
 		PAYLOAD_SET_CONFIG bluepinesuite total_detected "$total_detected"
 			
@@ -2472,15 +2657,18 @@ scan_detect_from_scanned() {
 	local total_BT_CUSTOMOU=0
 	local total_found_scans=0
 	local total_found_saved=0
+	local totalmin=0
+	local runtime=0
+	local totalruntime=0
 	
 	if [[ "$scan_custom" -eq 1 ]] ; then
-		resp=$(CONFIRMATION_DIALOG "Confirm Custom OUI/Name - Scanned/Saved ${text_target_UC}s?")
+		resp=$(CONFIRMATION_DIALOG "Confirm Detect ALL on Custom OUI/Name - Scanned/Saved ${text_target_UC}s?")
 	else
 		resp=$(CONFIRMATION_DIALOG "Confirm Detect ALL - Scanned/Saved ${text_target_UC}s?")
 	fi
 	
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-		
+		start=$SECONDS
 		TIMESTAMP=$(date +"%Y-%m-%d_%H%M%S")
 		REPORT_DETECT_FILE="$LOOT_DETECT/DetectTargets_${TIMESTAMP}.txt"
 	
@@ -2544,16 +2732,21 @@ scan_detect_from_scanned() {
 		if [[ "$scan_stealth" -eq 0 ]] ; then DO_A_BARREL_ROLL; fi
 		# if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE SLOW; fi
 		if [[ "${#BT_TARGETS[@]}" -gt 0 ]] ; then
-			LOG "Scanning ${#BT_TARGETS[@]} scanned ${text_target_LC}s, please wait..."
+			startScan=$SECONDS
+			LOG "Scanning ${#BT_TARGETS[@]} scanned ${text_target_UC}s, please wait..."
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			printf "%s - EVENT: Start Scanning scanned Targets\n" "$(date +"%Y-%m-%d_%H%M%S")" >> "$REPORT_DETECT_FILE"
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			printf "Scanning %s scanned Targets, please wait...\n" "${#BT_TARGETS[@]}" >> "$REPORT_DETECT_FILE"
-			if [[ "${#BT_TARGETS[@]}" -gt "$savedTargWarn" && "$scan_custom" -eq 0 ]] ; then
+			if [[ "${#BT_TARGETS[@]}" -gt "$savedTargWarn" ]] ; then
 				LOG magenta "====================================== WARNING =="
-				LOG red     "Scanned ${text_target_LC}s count is greater than ${savedTargWarn}!"
+				LOG red     "Scanned ${text_target_UC}s count is greater than ${savedTargWarn}!"
 				LOG red     "Extra time needed to scan for ALL Detections!"
-				LOG red     "Approx. 3 min for 1500 ${text_target_LC}s"
+				if [[ "$scan_custom" -eq 1 ]] ; then
+					LOG red     "Approx. 90s for 1500 ${text_target_LC}s"
+				else
+					LOG red     "Approx. 3 min for 1500 ${text_target_LC}s"
+				fi
 				LOG magenta "====================================== WARNING =="
 				printf "WARNING: Scanned Targets count is greater than %s!\n" "${savedTargWarn}" >> "$REPORT_DETECT_FILE"
 				printf "Extra time needed to scan for ALL Detections!\n" >> "$REPORT_DETECT_FILE"
@@ -2597,8 +2790,15 @@ scan_detect_from_scanned() {
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			printf "%s - EVENT: Complete Scanning scanned Targets\n" "$(date +"%Y-%m-%d_%H%M%S")" >> "$REPORT_DETECT_FILE"
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
-			LOG "Completed scanning scanned ${text_target_LC}s."
+			LOG green "Completed scanning scanned ${text_target_UC}s."
 			printf "Completed scanning scanned Targets.\n" >> "$REPORT_DETECT_FILE"
+			runtime=$((SECONDS-startScan))
+			if [[ "$runtime" -gt 60 ]] ; then
+				minutes=$((runtime/60)); secs=$((runtime%60))
+				LOG "Time to scan ${#BT_TARGETS[@]} scanned ${text_target_UC}(s): ${minutes}min ${secs}s"
+			else
+				LOG "Time to scan ${#BT_TARGETS[@]} scanned ${text_target_UC}(s): ${runtime}s"
+			fi
 			total_BT_AXONCAMS=${#BT_AXONCAMS[@]}
 			total_BT_CCSKIMMR=${#BT_CCSKIMMR[@]}
 			total_BT_FLIPPERS=${#BT_FLIPPERS[@]}
@@ -2610,12 +2810,16 @@ scan_detect_from_scanned() {
 
 			total_found_scans=$((total_BT_AXONCAMS + total_BT_CCSKIMMR + total_BT_FLIPPERS + total_BT_FLOCKCAM + total_BT_MESHTAST + total_BT_USBKILLS + total_BT_PINEAPPS + total_BT_CUSTOMOU))
 			if [[ "$total_found_scans" -gt 0 ]] ; then
-				LOG red "Found ${total_found_scans} suspect scanned ${text_target_LC}s..."
-				printf "Found %s suspect scanned Targets...\n" "${total_found_scans}" >> "$REPORT_DETECT_FILE"
+				LOG red "Found ${total_found_scans} suspect scanned ${text_target_LC}(s)..."
+				printf "Found %s suspect scanned Target(s)...\n" "${total_found_scans}" >> "$REPORT_DETECT_FILE"
 			else
 				LOG "No suspect scanned ${text_target_LC}s found!"
 				printf "No suspect scanned Targets found!\n" >> "$REPORT_DETECT_FILE"
 			fi
+			LOG blue "================================================="
+			# set scan values
+			total_scans=$((total_scans + 1))
+			PAYLOAD_SET_CONFIG bluepinesuite total_scans "$total_scans"
 		else
 			LOG red "No Scanned ${text_target_UC}s available yet."
 			printf "No Scanned Targets available yet.\n" >> "$REPORT_DETECT_FILE"
@@ -2633,17 +2837,22 @@ scan_detect_from_scanned() {
 		total_BT_CUSTOMOU=0
 		
 		if [[ -s "$SAVEDTARGETS_FILE" ]]; then
+			startScan=$SECONDS
 			linecount=$(grep -c '.' "$SAVEDTARGETS_FILE")
-			LOG "Scanning ${linecount} Saved ${text_target_LC}s, please wait..."
+			LOG "Scanning ${linecount} Saved ${text_target_UC}s, please wait..."
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			printf "%s - EVENT: Start Scanning Saved Targets\n" "$(date +"%Y-%m-%d_%H%M%S")" >> "$REPORT_DETECT_FILE"
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			printf "Scanning %s Saved Targets, please wait...\n" "${linecount}" >> "$REPORT_DETECT_FILE"
-			if [[ "$linecount" -gt "$savedTargWarn" && "$scan_custom" -eq 0 ]] ; then
+			if [[ "$linecount" -gt "$savedTargWarn" ]] ; then
 				LOG magenta "====================================== WARNING =="
-				LOG red     "Saved ${text_target_LC}s count is greater than ${savedTargWarn}!"
+				LOG red     "Saved ${text_target_UC}s count is greater than ${savedTargWarn}!"
 				LOG red     "Extra time needed to scan for ALL Detections!"
-				LOG red     "Approx. 3 min for 1500 ${text_target_LC}s"
+				if [[ "$scan_custom" -eq 1 ]] ; then
+					LOG red     "Approx. 90s for 1500 ${text_target_LC}s"
+				else
+					LOG red     "Approx. 3 min for 1500 ${text_target_LC}s"
+				fi
 				LOG magenta "====================================== WARNING =="
 				printf "WARNING: Saved Targets count is greater than %s!\n" "${savedTargWarn}" >> "$REPORT_DETECT_FILE"
 				printf "Extra time needed to scan for ALL Detections!\n" >> "$REPORT_DETECT_FILE"
@@ -2667,11 +2876,18 @@ scan_detect_from_scanned() {
 					fi
 				fi
 			done < "$SAVEDTARGETS_FILE"
-			LOG "Completed scanning Saved ${text_target_LC}s."
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			printf "%s - EVENT: Complete Scanning Saved Targets\n" "$(date +"%Y-%m-%d_%H%M%S")" >> "$REPORT_DETECT_FILE"
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
+			LOG green "Completed scanning Saved ${text_target_UC}s."
 			printf "Completed scanning Saved Targets.\n" >> "$REPORT_DETECT_FILE"
+			runtime=$((SECONDS-startScan))
+			if [[ "$runtime" -gt 60 ]] ; then
+				minutes=$((runtime/60)); secs=$((runtime%60))
+				LOG "Time to scan ${linecount} Saved ${text_target_UC}s: ${minutes}min ${secs}s"
+			else
+				LOG "Time to scan ${linecount} Saved ${text_target_UC}s: ${runtime}s"
+			fi
 			total_BT_AXONCAMS=${#BT_AXONCAMS[@]}
 			total_BT_CCSKIMMR=${#BT_CCSKIMMR[@]}
 			total_BT_FLIPPERS=${#BT_FLIPPERS[@]}
@@ -2683,12 +2899,16 @@ scan_detect_from_scanned() {
 
 			total_found_saved=$((total_BT_AXONCAMS + total_BT_CCSKIMMR + total_BT_FLIPPERS + total_BT_FLOCKCAM + total_BT_MESHTAST + total_BT_USBKILLS + total_BT_PINEAPPS + total_BT_CUSTOMOU))
 			if [[ "$total_found_saved" -gt 0 ]] ; then
-				LOG red "Found ${total_found_saved} suspect Saved ${text_target_LC}s..."
-				printf "Found %s suspect Saved Targets...\n" "${total_found_saved}" >> "$REPORT_DETECT_FILE"
+				LOG red "Found ${total_found_saved} suspect Saved ${text_target_LC}(s)..."
+				printf "Found %s suspect Saved Target(s)...\n" "${total_found_saved}" >> "$REPORT_DETECT_FILE"
 			else
 				LOG "No suspect Saved ${text_target_LC}s found!"
 				printf "No suspect Saved Targets found!\n" >> "$REPORT_DETECT_FILE"
 			fi
+			LOG blue "================================================="
+			# set scan values
+			total_scans=$((total_scans + 1))
+			PAYLOAD_SET_CONFIG bluepinesuite total_scans "$total_scans"
 		else
 			LOG red "No Saved ${text_target_UC}s available yet."
 			printf "No Saved Targets available yet.\n" >> "$REPORT_DETECT_FILE"
@@ -2697,13 +2917,25 @@ scan_detect_from_scanned() {
 		shopt -u nocasematch
 		LOG " "
 		
+		runtime=$((SECONDS-start))
+		totalruntime=$((totalruntime+runtime))
+		if [[ "$totalruntime" -gt 60 ]] ; then 
+			totalmin=$((totalruntime/60)); secs=$((totalruntime%60))
+			if [[ "$secs" -gt 34 ]] ; then totalmin=$((totalmin+1)); fi
+		else
+			if [[ "$totalruntime" -gt 34 ]] ; then totalmin=1; fi
+		fi
+		# set scan values 
+		total_scan_min=$((total_scan_min + totalmin))
+		PAYLOAD_SET_CONFIG bluepinesuite total_scan_min "$total_scan_min"
+		
 		if [[ "$total_found_scans" -gt 0 ]] ; then
-			LOG "$total_found_scans Suspects found in Scanned ${text_target_UC}s list!"
-			printf "%s Suspects found in Scanned Targets list!\n" "${total_found_scans}" >> "$REPORT_DETECT_FILE"
+			LOG "$total_found_scans Suspect(s) found in Scanned ${text_target_UC}s list!"
+			printf "%s Suspect(s) found in Scanned Targets list!\n" "${total_found_scans}" >> "$REPORT_DETECT_FILE"
 		fi
 		if [[ "$total_found_saved" -gt 0 ]] ; then
-			LOG "$total_found_saved Suspects found in Saved ${text_target_UC}s list!"
-			printf "%s Suspects found in Saved Targets list!\n" "${total_found_saved}" >> "$REPORT_DETECT_FILE"
+			LOG "$total_found_saved Suspect(s) found in Saved ${text_target_UC}s list!"
+			printf "%s Suspect(s) found in Saved Targets list!\n" "${total_found_saved}" >> "$REPORT_DETECT_FILE"
 		fi
 		if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
 		if [[ "$total_found_scans" -gt 0 || "$total_found_saved" -gt 0 ]] ; then
@@ -2770,10 +3002,8 @@ scan_detect_from_scanned() {
 			fi
 			LOG green "No malicious suspects found!"
 			printf "No malicious suspects found!\n" >> "$REPORT_DETECT_FILE"
-		fi		
+		fi
 		# set scan values
-		total_scans=$((total_scans + 1))
-		PAYLOAD_SET_CONFIG bluepinesuite total_scans "$total_scans"
 		PAYLOAD_SET_CONFIG bluepinesuite total_detected "$total_detected"
 			
 		LOG " "
@@ -3402,15 +3632,22 @@ detect_jammers() {
 			done
 			
 			
-			
-			
 			length_display
 			printf "Total Runtime: %s\n" "$totalruntime_display" >> "$REPORT_DETJAM_FILE"
 			printf "════════════════════════════════════════════\n" >> "$REPORT_DETJAM_FILE"
 			printf "%s - EVENT: Finish scan\n" $(date +"%Y-%m-%d_%H%M%S") >> "$REPORT_DETJAM_FILE"
 			printf "════════════════════════════════════════════\n" >> "$REPORT_DETJAM_FILE"
 			
+			if [[ "$totalruntime" -gt 60 ]] ; then 
+				totalmin=$((totalruntime/60)); secs=$((totalruntime%60))
+				if [[ "$secs" -gt 34 ]] ; then totalmin=$((totalmin+1)); fi
+			else
+				if [[ "$totalruntime" -gt 34 ]] ; then totalmin=1; fi
+			fi
+			# set scan values 
+			total_scan_min=$((total_scan_min + totalmin))
 			total_scans=$((total_scans + 1))
+			PAYLOAD_SET_CONFIG bluepinesuite total_scan_min "$total_scan_min"
 			PAYLOAD_SET_CONFIG bluepinesuite total_scans "$total_scans"
 			
 			if [[ "$jammerDet" -gt 0 ]] ; then
