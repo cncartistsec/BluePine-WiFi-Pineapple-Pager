@@ -223,6 +223,7 @@ device_hunter() {
 		local origtargcount="${#BT_TARGETS[@]}"
 		local newtargcount=0
 		local newfoundcount=0
+		local scancomplete=0
 		
 		# set on each total run
 		cancel_app=0
@@ -370,7 +371,8 @@ device_hunter() {
 		
 		
 		while true; do
-		
+			scancomplete=0
+			
 			start=$SECONDS
 			scannumber=$((scannumber + 1))
 			reset_bt_adapter
@@ -1111,6 +1113,7 @@ device_hunter() {
 			fi
 			
 			# set scan values
+			scancomplete=1
 			runtime=$((SECONDS-start))
 			totalruntime=$((totalruntime+runtime))
 			total_scans=$((total_scans + 1))
@@ -1273,8 +1276,11 @@ device_hunter() {
 			fi
 		fi
 		LOG "Total Scantime: ${totalruntime_display}"
-		if [[ "$scannumber" -gt 1 ]] ; then
+		printf "Total Scantime: %s\n" "${totalruntime_display}" >> "$REPORT_FILE"
+		if [[ "$scancomplete" -eq 0 && "$scannumber" -gt 1 ]] ; then
 			scannumberShow=$((scannumber-1))
+		else
+			scannumberShow="$scannumber"
 		fi
 		if [[ "$newfoundcount" -gt 0 ]] ; then
 			if [[ "$scannumberShow" -gt 1 ]] ; then
@@ -1285,6 +1291,9 @@ device_hunter() {
 		else
 			LOG red "No Unique ${text_target_UC}s Found in ${scannumberShow} Scan(s)"
 		fi
+		printf "%s Unique Targets Found in %s Scan(s)\n" "${newfoundcount}" "${scannumberShow}" >> "$REPORT_FILE"
+		LOG " "
+		LOG "Full results saved to: $(basename ${REPORT_FILE})"
 		LOG blue "================= Scan Results =================="
 		# time to view results
 		sleep 3
@@ -1951,8 +1960,8 @@ scan_detection() {
 		PAYLOAD_SET_CONFIG bluepinesuite total_detected "$total_detected"
 			
 		printf "\n" >> "$REPORT_DETECT_FILE"
-		# LOG cyan "Results saved to: ${REPORT_DETECT_FILE}"
-		printf "Results saved to: %s" "${REPORT_DETECT_FILE}" >> "$REPORT_DETECT_FILE"
+		LOG " "
+		LOG "Full results saved to: $(basename ${REPORT_DETECT_FILE})"
 		
 		LOG " "
 		if [[ ${detections} -gt 0 ]]; then
@@ -2331,7 +2340,7 @@ check_bt_customou() {
 			# check if key exists, even if empty
 			if [[ -v BT_CUSTOMOU[$mac] ]]; then
 				# only update if name not empty
-				if [[ -n "$name" && "$name" != "(unknown)" ]] ; then
+				if [[ -n "$name" && "$name" != "(unknown)" && "$name" != "Unknown" ]] ; then
 					BT_CUSTOMOU[$mac]="$name"
 				fi
 			else
@@ -2339,7 +2348,7 @@ check_bt_customou() {
 			fi
 			if [[ -v BT_TARGETS[$mac] ]]; then
 				# only update if name not empty
-				if [[ -n "$name" && "$name" != "(unknown)" ]] ; then
+				if [[ -n "$name" && "$name" != "(unknown)" && "$name" != "Unknown" ]] ; then
 					BT_TARGETS[$mac]="$name"
 					# LOG "ADDING INSIDE! $mac Name: $name"
 				fi
@@ -2357,7 +2366,7 @@ check_bt_customou() {
 				# check if key exists, even if empty
 				if [[ -v BT_CUSTOMOU[$mac] ]]; then
 					# only update if name not empty
-					if [[ -n "$name" && "$name" != "(unknown)" ]] ; then
+					if [[ -n "$name" && "$name" != "(unknown)" && "$name" != "Unknown" ]] ; then
 						BT_CUSTOMOU[$mac]="$name"
 					fi
 				else
@@ -2365,7 +2374,7 @@ check_bt_customou() {
 				fi
 				if [[ -v BT_TARGETS[$mac] ]]; then
 					# only update if name not empty
-					if [[ -n "$name" && "$name" != "(unknown)" ]] ; then
+					if [[ -n "$name" && "$name" != "(unknown)" && "$name" != "Unknown" ]] ; then
 						BT_TARGETS[$mac]="$name"
 						# LOG "ADDING INSIDE! $mac Name: $name"
 					fi
@@ -2383,7 +2392,7 @@ check_bt_customou() {
 				# check if key exists, even if empty
 				if [[ -v BT_CUSTOMOU[$mac] ]]; then
 					# only update if name not empty
-					if [[ -n "$name" && "$name" != "(unknown)" ]] ; then
+					if [[ -n "$name" && "$name" != "(unknown)" && "$name" != "Unknown" ]] ; then
 						BT_CUSTOMOU[$mac]="$name"
 					fi
 				else
@@ -2391,7 +2400,7 @@ check_bt_customou() {
 				fi
 				if [[ -v BT_TARGETS[$mac] ]]; then
 					# only update if name not empty
-					if [[ -n "$name" && "$name" != "(unknown)" ]] ; then
+					if [[ -n "$name" && "$name" != "(unknown)" && "$name" != "Unknown" ]] ; then
 						BT_TARGETS[$mac]="$name"
 						# LOG "ADDING INSIDE! $mac Name: $name"
 					fi
