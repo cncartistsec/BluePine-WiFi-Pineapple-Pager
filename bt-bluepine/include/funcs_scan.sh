@@ -1018,12 +1018,13 @@ device_hunter() {
 					fi
 				fi
 				
+				# mark scan as complete for final count
+				scancomplete=1
+				
 				# exit after 1 loop for testing
 				# LOG "exit for testing"; exit 0
 				
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
-				
-				if [[ "$scan_infrepeat" -eq 1 ]] ; then check_cancel; if [[ "$cancel_app" -eq 1 ]]; then break; fi fi
 				
 				# LOG "re-order" # sort rssis in descending order
 				# A more robust approach using a while loop:
@@ -1113,7 +1114,6 @@ device_hunter() {
 			fi
 			
 			# set scan values
-			scancomplete=1
 			runtime=$((SECONDS-start))
 			totalruntime=$((totalruntime+runtime))
 			total_scans=$((total_scans + 1))
@@ -1133,7 +1133,6 @@ device_hunter() {
 				fi
 			fi
 			LOG cyan   "|- Signal -| -- MAC Address -- - Name/Manuf${gps_disptxt}"
-			
 			
 			# printf "════════════════════════════════════════════\n" >> "$REPORT_FILE"
 			# printf "|- Signal -| -- MAC Address -- - Name/Manuf\n" >> "$REPORT_FILE"
