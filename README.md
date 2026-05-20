@@ -6,7 +6,7 @@ Ex. "/mmc/root/payloads/user/reconnaissance/bt-bluepine" would put "BluePine" un
 
 On first run it will run through an automated install for dependency "evtest" which monitors the pagers input buttons for pausing/stopping infinite scans, and "GNU grep" for more efficient pattern matching.  After dependencies are checked/installed, ringtones will be verified and copied if they do not exist.  When dependencies and ringtones are met, you will reach the BluePine menu and these items will be checked silently each start of the app without being prompted again.  It's tested on Pager Firmware 1.0.8+ and should work on all future versions. 
 
-Each time the app starts, it will prompt you asking about a USB Bluetooth Adapter to select which Bluetooth interface to use for scanning.  Using a USB CSR8510 / CSR v4.0 Bluetooth Adapter instead of the Pagers internal Bluetooth provides better range and ability to change MAC address.
+Each time the app starts it will check for external Bluetooth and if found, it will ask about a USB Bluetooth Adapter to select which Bluetooth interface to use for scanning.  Using a USB CSR8510 / CSR v4.0 Bluetooth Adapter instead of the internal Bluetooth provides better range and ability to change MAC address.
 
 MAC details and device names are hidden in the images below due to "Privacy Mode" being enabled. Privacy Mode allows you to hide major details on the pager screen/display while keeping full functionality.  Privacy mode is disabled by default and can be enabled in Preferences -> Extra.
 
@@ -34,12 +34,20 @@ The default font size for the list picker is set at medium as seen below (on the
 BluePines menus look best if the list picker font size is small.  [Please use this tool](https://github.com/cncartistsec/WiFi-Pineapple-Pager-Payloads/tree/main/theme-cfg-list-font) which changes files relating to the list picker font size to be smaller, can return back to default.  Theme needs to be reloaded after changing to apply.
 
 
+# Multi-Architecture Support
+![BluePine Multi-Architecture Support](images/BT-bluepine-multi-arch.jpg)
+
+AArch64/ARM64/Debian Support files are not included with the pager payload from the Hak5 repo.  BluePine is tested on ClockworkPi (Trixie) & Hackberry (Kali) and should work on other Raspberry Pi based systems.  The files can be found [here along with the latest version of BluePine](https://github.com/cncartistsec/BluePine-WiFi-Pineapple-Pager/).
+
+Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" folder, desktop shortcut/icon included.  There are different dependencies for AArch64/ARM64/Debian which are built into the scripts dependency check: "jq" & "ieee-data" (oui info) are required, while "evtest" is not.
+
+
 
 # Title: BluePine
 # Author: cncartist
 # Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.3
+# Version: 1.4
 # 
 # ============================================
 # Acknowledgements: 
@@ -49,11 +57,11 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 # Zombie UFO Theme - Author: Zombie Joe - (theme support & testing)
 # toggle_ab_leds - https://github.com/jader242 - (stealth mode inspiration)
 # https://www.rapidtables.com/code/text/ascii-table.html - (acsii verification for logo)
-# https://github.com/judcrandall/lookout.py/tree/main - (Axon OUI)
+# https://github.com/judcrandall/lookout.py - (Axon OUI)
 # Fuzz_Finder - Author: OSINTI4L - (Axon OUIs)
-# https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE/tree/main - (CC Skimmer Data)
-# https://github.com/colonelpanichacks/flock-you/tree/main - (Flock OUIs + Names)
-# StamenScan - Author: FusedStamen - https://github.com/FusedStamen/StamenScan/tree/main - (MAC filter idea)
+# https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE - (CC Skimmer Data)
+# https://github.com/colonelpanichacks/flock-you - (Flock OUIs + Names)
+# StamenScan - Author: FusedStamen - https://github.com/FusedStamen/StamenScan - (MAC filter idea)
 # 
 # ============================================
 # Includes: 
@@ -109,6 +117,13 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 #  -- Dependencies / Ringtones:
 #  -- -- -- evtest and GNU Grep are required dependencies, will install automatically if confirmed
 #  -- -- -- Will check for ringtones at start and copy if confirmed
+#  -- AArch64/ARM64/Debian Support
+#  -- -- -- Tested on ClockworkPi (Trixie) & Hackberry (Kali) and should work on other Raspberry Pi based systems.
+#  -- -- -- Support files are not included with the pager payload from the official repo, they can be found at: 
+#  -- -- -- https://github.com/cncartistsec/BluePine-WiFi-Pineapple-Pager/tree/main/bt-bluepine/include
+#  -- -- -- Required files in "include/aarch64" folder, desktop shortcut/icon included.
+#  -- -- -- Included to convert DuckyScript commands utilized for usage on generic Debian/Bash terminals.
+#  -- -- -- Loot/Reports are stored relative to the script directory, in the 'loot' folder.
 # 
 # ============================================
 # Notes:
@@ -181,6 +196,8 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 # 
 # Saved Targets File: "/root/loot/csec/bt-bluepine/targets/SavedTargets.txt"
 # Last Target File (MAC only): "/root/loot/csec/bt-bluepine/targets/LastTarget.txt"
+# 
+# NOTE: AArch64/ARM64/Debian - Loot/Reports are stored relative to the script directory, in the 'loot' folder.
 # ============================================
 #             SCAN LED STATUS
 # ============================================
@@ -210,6 +227,7 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 # ============================================
 #            Version History
 # ============================================
+# v1.4 -- AArch64/ARM64/Debian Support
 # v1.3 -- Filtering Options + Scantime Tracking
 # v1.2 -- GPS Updates + Bug Fixes
 # v1.1 -- Configuration Saving + Added Functionality
@@ -220,4 +238,7 @@ BluePines menus look best if the list picker font size is small.  [Please use th
 # build log viewer in?
 # change actual sound setting for system/alerts?
 # implement sql lite db instead of current method?
+# add node support for other data source?
+# add more detections/detection based on UUID?
 # ============================================
+# 
