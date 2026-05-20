@@ -1,5 +1,5 @@
 # BluePine to Debian Desktop Shortcut Icon
-Copy the Desktop Icon wherever you'd like, take note of it's path to add to the "BluePine.desktop" file.
+Copy the Desktop Icon wherever you'd like, take note of its path to add to the "BluePine.desktop" file.
 
 
 # Create file and add contents, or copy File from this repo, update contents, and make executable
