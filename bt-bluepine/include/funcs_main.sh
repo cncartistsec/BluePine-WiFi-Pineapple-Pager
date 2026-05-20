@@ -1,7 +1,7 @@
 #!/bin/bash
 # Main Functions for BluePine
 # Author: cncartist
-# Version: 1.3
+# Version: 1.4
 # 
 # update_bluetooth_status
 # update_bluetooth_name
@@ -17,6 +17,7 @@
 # select_target
 # saved_target_remove_custom
 # saved_targets_archive
+# saved_targets_saveload
 # 
 # settings_check
 # config_check
@@ -24,6 +25,7 @@
 # config_backup
 # config_restore
 # 
+# start_cancelscan
 # start_evtest
 # check_cancel
 # target_mac_check
@@ -275,7 +277,7 @@ update_bluetooth_name(){
 		# Confirm Name Change
 		resp=$(CONFIRMATION_DIALOG "Confirm BT Name Change to: '${newname}'
 		
-		For Device: ${devicecurrnt}?")
+For Device: ${devicecurrnt}?")
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 			MAC_CHECK=$(hciconfig $devicecurrnt | grep 'BD Address' | awk '{print $3}')
 			LOG green "Updating Name to ${newname} for Device: ${devicecurrnt}..."
@@ -286,7 +288,7 @@ update_bluetooth_name(){
 			# bluetoothctl system-alias "${newname}" 2>/dev/null
 			LOG "Applying change..."
 			
-			bluetoothctl <<-EOF
+			bluetoothctl <<-EOF >/dev/null 2>&1
 			select $MAC_CHECK
 			system-alias "${newname}"
 			quit
@@ -449,7 +451,7 @@ update_bluetooth_mac(){
 	resp=$(CONFIRMATION_DIALOG "Change MAC Address on Device: ${devicecurrnt}?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		
-		newseladdrnum=$(NUMBER_PICKER "Selection # (0-${maxarritems}):" $defaultseladdrnum)
+		newseladdrnum=$(NUMBER_PICKER "Selection # (0-${maxarritems})" $defaultseladdrnum)
 		case $? in $DUCKYSCRIPT_CANCELLED|$DUCKYSCRIPT_REJECTED) newseladdrnum=$defaultseladdrnum ;; esac
 		[ $newseladdrnum -lt 0 ] && newseladdrnum=0
 		[ $newseladdrnum -gt $maxarritems ] && newseladdrnum=$maxarritems
@@ -529,7 +531,7 @@ update_bluetooth_mac(){
 				# escape name for single quotes (removes some input if single quotes present)
 				newalias="${newalias//\'/\'}"
 				sleep 0.25
-				newalias=$(TEXT_PICKER "New Permament Alias:" "$newalias")
+				newalias=$(TEXT_PICKER "New Permament Alias" "$newalias")
 				if [[ -n "$newalias" ]] && [[ "$newalias" != " " ]]; then
 					break
 				else
@@ -551,45 +553,66 @@ update_bluetooth_mac(){
 			if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE SLOW; fi
 			LOG "Changing USB $devicecurrnt to MAC: ${NEW_MAC}..."
 			LOG blue "================================================="
-			bdaddr -i $devicecurrnt "$NEW_MAC" 2>/dev/null
+			if [[ "$archCur" == "pager" ]] ; then
+				# pager only has CSR USB BT
+				bdaddr -i $devicecurrnt "$NEW_MAC" 2>/dev/null
+			elif [[ "$archCur" == "aarch64" ]] ; then
+				# TBD verify which adapter and which lib to use, currently assume CSR
+				# bdaddr compiled for aarch64/raspberry pi/clockwork pi
+				chmod +x ./include/aarch64/lib/bdaddr 2>/dev/null
+				sleep 1
+				./include/aarch64/lib/bdaddr -i $devicecurrnt "$NEW_MAC" 2>/dev/null
+			else
+				btmgmt -i $devicecurrnt public-addr "$NEW_MAC" 2>/dev/null
+			fi
 			sleep 2
-			# unplug
-			LOG red "Please UNPLUG USB Bluetooth Adapter NOW..."
-			LOG blue "================================================="
-			LOG red "This needs to be done to reset the MAC!"
-			LOG blue "================================================="
-			LOG "You will plug it in immediately afterwards."
-			LOG blue "================================================="
-			LOG red "Please UNPLUG USB Bluetooth Adapter NOW..."
-			LOG blue "================================================="
-			LOG "Press OK to continue once unplugged..."
-			LOG " "
-			WAIT_FOR_BUTTON_PRESS A
+			if [[ "$archCur" == "pager" || "$archCur" == "aarch64" ]] ; then
+				# unplug
+				LOG red "Please UNPLUG USB Bluetooth Adapter NOW..."
+				LOG blue "================================================="
+				LOG red "This needs to be done to reset the MAC!"
+				LOG blue "================================================="
+				LOG "You will plug it in immediately afterwards."
+				LOG blue "================================================="
+				LOG red "Please UNPLUG USB Bluetooth Adapter NOW..."
+				LOG blue "================================================="
+				LOG "Press OK to continue once unplugged..."
+				LOG " "
+				WAIT_FOR_BUTTON_PRESS A
+			fi
 			
 			if [[ "$scan_stealth" -eq 0 ]] ; then LED YELLOW SLOW; fi
-			# check re-plug
-			LOG red "PLUG USB Bluetooth IN AGAIN to continue..."
-			LOG " "
-			INITIAL_COUNT=$(ls /sys/bus/usb/devices/ | wc -l)
-			while true; do
-				sleep 0.25
-				CURRENT_COUNT=$(ls /sys/bus/usb/devices/ | wc -l)
-				if [[ "$CURRENT_COUNT" -gt "$INITIAL_COUNT" ]] ; then
-					if [[ "$scan_stealth" -eq 0 ]] ; then LED CYAN FAST; fi
-					LOG magenta "Device detected, please wait..."
-					sleep 2
-					LOG "Start device reset..."
-					reset_bt_adapter "$devicecurrnt"
-					# hciconfig "$devicecurrnt" down 2>/dev/null
-					# sleep 1
-					# hciconfig "$devicecurrnt" up 2>/dev/null
-					# sleep 1
-					LOG green "Completed device reset!"
-					LOG " "
-					# LOG "exiting loop"
-					break
-				fi
-			done
+			if [[ "$archCur" == "pager" || "$archCur" == "aarch64" ]] ; then
+				# check re-plug
+				LOG red "PLUG USB Bluetooth IN AGAIN to continue..."
+				LOG " "
+				INITIAL_COUNT=$(ls /sys/bus/usb/devices/ | wc -l)
+				while true; do
+					sleep 0.25
+					CURRENT_COUNT=$(ls /sys/bus/usb/devices/ | wc -l)
+					if [[ "$CURRENT_COUNT" -gt "$INITIAL_COUNT" ]] ; then
+						if [[ "$scan_stealth" -eq 0 ]] ; then LED CYAN FAST; fi
+						LOG magenta "Device detected, please wait..."
+						sleep 2
+						LOG "Start device reset..."
+						reset_bt_adapter "$devicecurrnt"
+						# hciconfig "$devicecurrnt" down 2>/dev/null
+						# sleep 1
+						# hciconfig "$devicecurrnt" up 2>/dev/null
+						# sleep 1
+						LOG green "Completed device reset!"
+						LOG " "
+						# LOG "exiting loop"
+						break
+					fi
+				done
+			else
+				sleep 2
+				LOG "Start device reset..."
+				reset_bt_adapter "$devicecurrnt"
+				LOG green "Completed device reset!"
+				LOG " "
+			fi
 			
 			if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
 			LOG blue "================================================="
@@ -611,7 +634,7 @@ update_bluetooth_mac(){
 					# sleep 1
 					# bluetoothctl system-alias "${newalias}" 2>/dev/null
 					
-					bluetoothctl <<-EOF
+					bluetoothctl <<-EOF >/dev/null 2>&1
 					select $NEW_MAC_CHECK
 					system-alias "${newalias}"
 					quit
@@ -647,7 +670,7 @@ update_bluetooth_mac(){
 						LOG " "
 						LOG "Restoring name to: ${OLD_NAME}"
 						sleep 1
-						bluetoothctl <<-EOF
+						bluetoothctl <<-EOF >/dev/null 2>&1
 						select $NEW_MAC_CHECK
 						system-alias "${OLD_NAME}"
 						quit
@@ -729,27 +752,29 @@ saved_targets_check() {
 		# IFS=' ' read -r key value <<< "$INPUT_STRING"
 		# -r prevents backslashes from being interpreted as escape characters
 		LOG "${linecount} Saved ${text_target_UC}s Found!"
-		if [[ "$linecount" -gt "$savedTargCrit" ]] ; then
-			if [[ "$scan_stealth" -eq 0 ]] ; then LED RED SLOW; fi
-			LOG red "===================================== CRITICAL =="
-			LOG red "Saved ${text_target_UC}s List is extremely large!"
-			LOG " "
-			LOG red "You'll experience severe performance impacts loading, viewing, or scanning Saved ${text_target_UC}s!"
-			LOG red "===================================== CRITICAL =="
-			LOG magenta "It's recommended to Clear or Clean the Saved ${text_target_UC}s List to be lower than ${savedTargWarn} ${text_target_UC}s."
-			LOG blue "================================================="
-		elif [[ "$linecount" -gt "$savedTargWarn" ]] ; then
-			if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA SLOW; fi
-			LOG magenta "====================================== WARNING =="
-			LOG "Saved ${text_target_UC}s List is very large!"
-			LOG " "
-			LOG "You'll experience performance impacts loading, viewing, or scanning Saved ${text_target_UC}s!"
-			LOG magenta "====================================== WARNING =="
-			LOG magenta "It's recommended to Clear or Clean the Saved ${text_target_UC}s List to be lower than ${savedTargWarn} ${text_target_UC}s."
-			LOG blue "================================================="
-		else
-			# if [[ "$scan_stealth" -eq 0 ]] ; then LED CYAN SLOW; fi
-			if [[ "$scan_stealth" -eq 0 ]] ; then DO_A_BARREL_ROLL; fi
+		if [[ "$archCur" == "pager" ]] ; then
+			if [[ "$linecount" -gt "$savedTargCrit" ]] ; then
+				if [[ "$scan_stealth" -eq 0 ]] ; then LED RED SLOW; fi
+				LOG red "===================================== CRITICAL =="
+				LOG red "Saved ${text_target_UC}s List is extremely large!"
+				LOG " "
+				LOG red "You'll experience severe performance impacts loading, viewing, or scanning Saved ${text_target_UC}s!"
+				LOG red "===================================== CRITICAL =="
+				LOG magenta "It's recommended to Clear or Clean the Saved ${text_target_UC}s List to be lower than ${savedTargWarn} ${text_target_UC}s."
+				LOG blue "================================================="
+			elif [[ "$linecount" -gt "$savedTargWarn" ]] ; then
+				if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA SLOW; fi
+				LOG magenta "====================================== WARNING =="
+				LOG "Saved ${text_target_UC}s List is very large!"
+				LOG " "
+				LOG "You'll experience performance impacts loading, viewing, or scanning Saved ${text_target_UC}s!"
+				LOG magenta "====================================== WARNING =="
+				LOG magenta "It's recommended to Clear or Clean the Saved ${text_target_UC}s List to be lower than ${savedTargWarn} ${text_target_UC}s."
+				LOG blue "================================================="
+			else
+				# if [[ "$scan_stealth" -eq 0 ]] ; then LED CYAN SLOW; fi
+				if [[ "$scan_stealth" -eq 0 ]] ; then DO_A_BARREL_ROLL; fi
+			fi
 		fi
 		LOG "Loading Saved ${text_target_UC}s into memory, please wait..."
 		LOG blue "================================================="
@@ -865,7 +890,7 @@ saved_targets_savecurrent() {
 			fi
 			
 			# Check if the string exists in the file
-			if grep -q "$target_mac" "$SAVEDTARGETS_FILE"; then
+			if [[ -s "$SAVEDTARGETS_FILE" ]] && grep -q "$target_mac" "$SAVEDTARGETS_FILE"; then
 				# echo "The string variable exists in the file."
 				# remove line that has mac first
 				sed -i "/$target_mac/d" "$SAVEDTARGETS_FILE"
@@ -935,7 +960,7 @@ saved_targets_saveall() {
 				fi
 				# LOG "${mac} - ${NEW_TARGET_MAC_NAME}"
 				# Check if the string exists in the file
-				if grep -q "$mac" "$SAVEDTARGETS_FILE"; then
+				if [[ -s "$SAVEDTARGETS_FILE" ]] && grep -q "$mac" "$SAVEDTARGETS_FILE"; then
 					# echo "The string variable exists in the file."
 					# only add if new name known, otherwise leave unchanged
 					if [[ "$NEW_TARGET_MAC_NAME" != "Unknown" ]] ; then
@@ -986,18 +1011,22 @@ saved_targets_list() {
 			fi
 		fi
 		LOG green "${saved_target_count} Saved ${text_target_UC}s available for selection!"
-		if [[ "$saved_target_count" -gt "$savedTargWarn" ]] ; then
-			LOG magenta "====================================== WARNING =="
-			LOG red     "Saved ${text_target_LC}s count is greater than ${savedTargWarn}!"
-			LOG red     "Extra time needed to prepare full list!"
-			LOG red     "Approx. 1 min for 1500 ${text_target_LC}s"
-			LOG magenta "====================================== WARNING =="
+		if [[ "$archCur" == "pager" ]] ; then
+			if [[ "$saved_target_count" -gt "$savedTargWarn" ]] ; then
+				LOG magenta "====================================== WARNING =="
+				LOG red     "Saved ${text_target_LC}s count is greater than ${savedTargWarn}!"
+				LOG red     "Extra time needed to prepare full list!"
+				LOG red     "Approx. 1 min for 1500 ${text_target_LC}s"
+				LOG magenta "====================================== WARNING =="
+			fi
+			LOG "Press OK to confirm viewing Saved ${text_target_UC}s..."
+			LOG " "
+			WAIT_FOR_BUTTON_PRESS A
+			sleep 0.5
+			resp=$(CONFIRMATION_DIALOG "Confirm viewing Saved ${text_target_UC}s?")
+		else
+			resp='y'
 		fi
-		LOG "Press OK to confirm viewing Saved ${text_target_UC}s..."
-		LOG " "
-		WAIT_FOR_BUTTON_PRESS A
-		sleep 0.5
-		resp=$(CONFIRMATION_DIALOG "Confirm viewing Saved ${text_target_UC}s?")
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 			# SHOW LIST FOR SELECTION IF CONFIRMED
 			if [[ "$scan_stealth" -eq 0 ]] ; then LED RED SLOW; fi
@@ -1095,7 +1124,7 @@ saved_targets_list() {
 						WAIT_FOR_BUTTON_PRESS A
 						sleep 0.5
 					
-						newtargaddrnum=$(NUMBER_PICKER "Saved ${text_target_UC} # (0-${saved_target_count_arr}):" $defaulttargaddrnum)
+						newtargaddrnum=$(NUMBER_PICKER "Saved ${text_target_UC} # (0-${saved_target_count_arr})" $defaulttargaddrnum)
 						case $? in $DUCKYSCRIPT_CANCELLED|$DUCKYSCRIPT_REJECTED) newtargaddrnum=$defaulttargaddrnum ;; esac
 						[ $newtargaddrnum -lt 0 ] && newtargaddrnum=0
 						[ $newtargaddrnum -gt $saved_target_count_arr ] && newtargaddrnum=$saved_target_count_arr
@@ -1146,20 +1175,26 @@ saved_targets_list() {
 				fi
 			fi
 			if [[ "$saved_target_rename" -eq 1 ]]; then
-				LOG "Press OK to confirm renaming a Saved ${text_target_UC}..."
-				WAIT_FOR_BUTTON_PRESS A
-				sleep 0.5
-				resp=$(CONFIRMATION_DIALOG "Confirm renaming Saved ${text_target_UC}?")
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG "Press OK to confirm renaming a Saved ${text_target_UC}..."
+					WAIT_FOR_BUTTON_PRESS A
+					sleep 0.5
+					resp=$(CONFIRMATION_DIALOG "Confirm renaming Saved ${text_target_UC}?")
+				else
+					resp='y'
+				fi
 				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 					# SHOW LIST FOR SELECTION IF CONFIRMED
 					defaulttargaddrnum=0
 					while true; do
-						LOG "Press OK to select a Saved ${text_target_UC}..."
-						LOG " "
-						WAIT_FOR_BUTTON_PRESS A
+						if [[ "$archCur" == "pager" ]] ; then
+							LOG "Press OK to select a Saved ${text_target_UC}..."
+							LOG " "
+							WAIT_FOR_BUTTON_PRESS A
+						fi
 						sleep 0.5
 					
-						newtargaddrnum=$(NUMBER_PICKER "Saved ${text_target_UC} # (0-${saved_target_count_arr}):" $defaulttargaddrnum)
+						newtargaddrnum=$(NUMBER_PICKER "Saved ${text_target_UC} # (0-${saved_target_count_arr})" $defaulttargaddrnum)
 						case $? in $DUCKYSCRIPT_CANCELLED|$DUCKYSCRIPT_REJECTED) newtargaddrnum=$defaulttargaddrnum ;; esac
 						[ $newtargaddrnum -lt 0 ] && newtargaddrnum=0
 						[ $newtargaddrnum -gt $saved_target_count_arr ] && newtargaddrnum=$saved_target_count_arr
@@ -1179,17 +1214,21 @@ saved_targets_list() {
 						
 						if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 							while true; do
-								LOG "Press OK to pick a new name..."
-								LOG " "
-								WAIT_FOR_BUTTON_PRESS A
+								if [[ "$archCur" == "pager" ]] ; then
+									LOG "Press OK to pick a new name..."
+									LOG " "
+									WAIT_FOR_BUTTON_PRESS A
+								fi
 								sleep 0.25
 								# escape name for single quotes (removes some input if single quotes present)
 								NEW_TARGET_MAC_NAME="${NEW_TARGET_MAC_NAME//\'/\'}"
 								NEW_TARGET_MAC_NAME=$(TEXT_PICKER "${text_target_UC} Name" "$NEW_TARGET_MAC_NAME")
 								LOG cyan "New Name: ${NEW_TARGET_MAC_NAME}"
-								LOG "Press OK to confirm..."
-								LOG " "
-								WAIT_FOR_BUTTON_PRESS A
+								if [[ "$archCur" == "pager" ]] ; then
+									LOG "Press OK to confirm..."
+									LOG " "
+									WAIT_FOR_BUTTON_PRESS A
+								fi
 								sleep 0.25
 								# Confirm Name Change
 								resp=$(CONFIRMATION_DIALOG "Confirm Name Change to '${NEW_TARGET_MAC_NAME}' from '${OLD_TARGET_MAC_NAME}'?")
@@ -1229,20 +1268,26 @@ saved_targets_list() {
 				fi
 			fi
 			if [[ "$saved_target_remove" -eq 1 ]]; then
-				LOG "Press OK to confirm removing a Saved ${text_target_UC}..."
-				WAIT_FOR_BUTTON_PRESS A
-				sleep 0.5
-				resp=$(CONFIRMATION_DIALOG "Confirm removing Saved ${text_target_UC}?")
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG "Press OK to confirm removing a Saved ${text_target_UC}..."
+					WAIT_FOR_BUTTON_PRESS A
+					sleep 0.5
+					resp=$(CONFIRMATION_DIALOG "Confirm removing Saved ${text_target_UC}?")
+				else
+					resp='y'
+				fi
 				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 					# SHOW LIST FOR SELECTION IF CONFIRMED
 					defaulttargaddrnum=0
 					while true; do
-						LOG "Press OK to select a Saved ${text_target_UC}..."
-						LOG " "
-						WAIT_FOR_BUTTON_PRESS A
+						if [[ "$archCur" == "pager" ]] ; then
+							LOG "Press OK to select a Saved ${text_target_UC}..."
+							LOG " "
+							WAIT_FOR_BUTTON_PRESS A
+						fi
 						sleep 0.5
 					
-						newtargaddrnum=$(NUMBER_PICKER "Saved ${text_target_UC} # (0-${saved_target_count_arr}):" $defaulttargaddrnum)
+						newtargaddrnum=$(NUMBER_PICKER "Saved ${text_target_UC} # (0-${saved_target_count_arr})" $defaulttargaddrnum)
 						case $? in $DUCKYSCRIPT_CANCELLED|$DUCKYSCRIPT_REJECTED) newtargaddrnum=$defaulttargaddrnum ;; esac
 						[ $newtargaddrnum -lt 0 ] && newtargaddrnum=0
 						[ $newtargaddrnum -gt $saved_target_count_arr ] && newtargaddrnum=$saved_target_count_arr
@@ -1314,18 +1359,22 @@ select_target() {
 		fi
 		LOG " "
 		LOG green "${target_count} ${text_target_UC}s available for selection!"
-		if [[ "$target_count" -gt "$savedTargWarn" ]] ; then
-			LOG magenta "====================================== WARNING =="
-			LOG red     "${text_target_LC}s count is greater than ${savedTargWarn}!"
-			LOG red     "Extra time needed to prepare full list!"
-			LOG red     "Approx. 1 min for 1500 ${text_target_LC}s"
-			LOG magenta "====================================== WARNING =="
+		if [[ "$archCur" == "pager" ]] ; then
+			if [[ "$target_count" -gt "$savedTargWarn" ]] ; then
+				LOG magenta "====================================== WARNING =="
+				LOG red     "${text_target_LC}s count is greater than ${savedTargWarn}!"
+				LOG red     "Extra time needed to prepare full list!"
+				LOG red     "Approx. 1 min for 1500 ${text_target_LC}s"
+				LOG magenta "====================================== WARNING =="
+			fi
+			LOG "Press OK to confirm viewing ${text_target_UC}s..."
+			LOG " "
+			WAIT_FOR_BUTTON_PRESS A
+			sleep 0.5
+			resp=$(CONFIRMATION_DIALOG "Confirm viewing ${text_target_UC}s?")
+		else
+			resp='y'
 		fi
-		LOG "Press OK to confirm viewing ${text_target_UC}s..."
-		LOG " "
-		WAIT_FOR_BUTTON_PRESS A
-		sleep 0.5
-		resp=$(CONFIRMATION_DIALOG "Confirm viewing ${text_target_UC}s?")
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 			# SHOW LIST FOR SELECTION IF CONFIRMED
 			if [[ "$scan_stealth" -eq 0 ]] ; then LED RED SLOW; fi
@@ -1429,12 +1478,14 @@ select_target() {
 				# SHOW LIST FOR SELECTION IF CONFIRMED
 				defaulttargaddrnum=0
 				while true; do
-					LOG "Press OK to select a ${text_target_UC}..."
-					LOG " "
-					WAIT_FOR_BUTTON_PRESS A
+					if [[ "$archCur" == "pager" ]] ; then
+						LOG "Press OK to select a ${text_target_UC}..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+					fi
 					sleep 0.5
 				
-					newtargaddrnum=$(NUMBER_PICKER "${text_target_UC} Selection # (0-${target_count_arr}):" $defaulttargaddrnum)
+					newtargaddrnum=$(NUMBER_PICKER "${text_target_UC} Selection # (0-${target_count_arr})" $defaulttargaddrnum)
 					case $? in $DUCKYSCRIPT_CANCELLED|$DUCKYSCRIPT_REJECTED) newtargaddrnum=$defaulttargaddrnum ;; esac
 					[ $newtargaddrnum -lt 0 ] && newtargaddrnum=0
 					[ $newtargaddrnum -gt $target_count_arr ] && newtargaddrnum=$target_count_arr
@@ -1657,7 +1708,7 @@ If no name is chosen, timestamp will be used as default.")
 						else
 							resp=$(CONFIRMATION_DIALOG "This Filename Suffix OK? ${formatted}
 							
-							Filename: SavedTargets_${formatted}.txt")
+Filename: SavedTargets_${formatted}.txt")
 							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 								LOG cyan "Filename Suffix chosen: SavedTargets_${formatted}.txt"
 								break
@@ -1728,28 +1779,28 @@ saved_targets_saveload() {
 		# Find all Archive files
 		local unsfiles=($(find "$LOOT_TARGETS" -name "SavedTargets_*" 2>/dev/null))
 		# sort file list
-		local files=($(printf '%s\0' "${unsfiles[@]}" | sort -n))
+		local files=($(printf '%s\n' "${unsfiles[@]}" | sort -n))
 		unset unsfiles
 
 		if [[ "${#files[@]}" -gt 0 ]] ; then
 			local LIST_STR=""
 			local count=1
-			for d in "${files[@]}"; do
-				# tell how many targets per file
-				LIST_STR="${LIST_STR}${count}: $(basename ${d}) (${text_target_UC}s: $(grep -c '.' "${d}"))
-		"
-				count=$((count + 1))
-			done
 			LOG "Archive Saved ${text_target_UC}s Files:"
 			LOG blue "============================== Archive Files ===="
-			LOG "$LIST_STR"
+			for d in "${files[@]}"; do
+				# tell how many targets per file
+				LOG "${count}: $(basename ${d}) (${text_target_UC}s: $(grep -c '.' "${d}"))"
+				count=$((count + 1))
+			done
 			LOG blue "============================== Archive Files ===="
 			# confirm it will overwrite current saved targets/file
 			LOG magenta "WARNING:"
 			LOG magenta "Loading an Archive File will overwrite current Saved ${text_target_UC}s File!"
-			LOG "Press OK to continue..."
-			LOG " "
-			WAIT_FOR_BUTTON_PRESS A
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "Press OK to continue..."
+				LOG " "
+				WAIT_FOR_BUTTON_PRESS A
+			fi
 			sleep 0.5
 			
 			resp=$(CONFIRMATION_DIALOG "Confirm choosing to Load a Saved ${text_target_UC}s File? ")
@@ -1758,15 +1809,19 @@ saved_targets_saveload() {
 				local boolcheckval="false"
 				local loopcount=0
 				#LOG "BEFORE WHILE boolcheckval: $boolcheckval"
-				LOG "Press OK when ready to select file to load..."
-				WAIT_FOR_BUTTON_PRESS A
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG "Press OK when ready to select file to load..."
+					WAIT_FOR_BUTTON_PRESS A
+				fi
 				while [ "$boolcheckval" != "true" ]; do
 					#LOG "boolcheckval: $boolcheckval"
 					if [ "$boolcheckval" != "true" ]; then
-						
-						if [ "$loopcount" -gt 0 ]; then
-							LOG " ^ Scroll UP for Files, or Press OK when ready"
-							WAIT_FOR_BUTTON_PRESS A
+					
+						if [[ "$archCur" == "pager" ]] ; then
+							if [ "$loopcount" -gt 0 ]; then
+								LOG " ^ Scroll UP for Files, or Press OK when ready"
+								WAIT_FOR_BUTTON_PRESS A
+							fi
 						fi
 						loopcount=$((loopcount + 1))
 						filenumsel=$(NUMBER_PICKER "Select a File number" "1")
@@ -1778,8 +1833,7 @@ saved_targets_saveload() {
 								SELECTED_FILE="${files[$filenumsel-1]}"
 								resp=$(CONFIRMATION_DIALOG "Confirm loading Saved ${text_target_UC}s File? $(basename $SELECTED_FILE) 
 								
-								New ${text_target_UC}s: $(grep -c '.' "${SELECTED_FILE}")
-								")
+New ${text_target_UC}s: $(grep -c '.' "${SELECTED_FILE}") ")
 								if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 									LOG blue "================================ Chosen File ===="
 									LOG "$(basename $SELECTED_FILE)"
@@ -1798,17 +1852,18 @@ saved_targets_saveload() {
 						#LOG "boolcheckval FIN: $boolcheckval"
 					fi
 				done
-				LOG "Press OK to continue..."
-				LOG " "
-				WAIT_FOR_BUTTON_PRESS A
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG "Press OK to continue..."
+					LOG " "
+					WAIT_FOR_BUTTON_PRESS A
+				fi
 				sleep 0.5
 					
 				resp=$(CONFIRMATION_DIALOG "FINAL: Confirm loading Saved ${text_target_UC}s File? $(basename $SELECTED_FILE) 
 				
-				${text_target_UC}s: $(grep -c '.' "${SELECTED_FILE}")
+${text_target_UC}s: $(grep -c '.' "${SELECTED_FILE}")
 				
-				This will OVERWRITE your current Saved ${text_target_UC}s file and then load the New ${text_target_UC}s.
-				")
+This will OVERWRITE your current Saved ${text_target_UC}s file and then load the New ${text_target_UC}s. ")
 				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 					sleep 1
 					# then saved targets from the new file will be loaded in
@@ -1839,6 +1894,7 @@ saved_targets_saveload() {
 		LOG " "
 	fi
 }
+
 
 
 # check settings
@@ -1876,16 +1932,19 @@ settings_check() {
 		text_target_UC="Device"
 		text_target_LC="device"
 	fi
-	btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
-	btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
-	if [[ "$scan_stealth" -eq 1 ]]; then
-		LED OFF
-		echo 0 > "$btn_a_path"
-		echo 0 > "$btn_b_path"
-	else
-		LED MAGENTA
-		echo 1 > "$btn_a_path"
-		echo 1 > "$btn_b_path"
+	
+	if [[ "$archCur" == "pager" ]] ; then
+		btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+		btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+		if [[ "$scan_stealth" -eq 1 ]]; then
+			LED OFF
+			echo 0 > "$btn_a_path"
+			echo 0 > "$btn_b_path"
+		else
+			LED MAGENTA
+			echo 1 > "$btn_a_path"
+			echo 1 > "$btn_b_path"
+		fi
 	fi
 }
 
@@ -1976,7 +2035,7 @@ config_backup() {
 			# file exists, has contents, confirm overwrite
 			resp=$(CONFIRMATION_DIALOG "Config Backup Exists!
 			
-			Confirm Overwrite?")
+Confirm Overwrite?")
 			if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 				confirmFile=1
 			else
@@ -2061,6 +2120,11 @@ config_restore() {
 	if [[ "$silent_backup" -eq 0 ]] ; then LOG " "; fi
 }
 
+# start cancel Scan
+start_cancelscan() {
+	echo " ---- Cancel Pressed! Please wait..."
+	printf "(BTN_EAST), value 1\n" >> "$KEYCKTMP_FILE"
+}
 
 # start key check collection
 start_evtest() {
@@ -2071,8 +2135,13 @@ start_evtest() {
 	# (evtest /dev/input/event0 | grep "^Event:" &> "$KEYCKTMP_FILE") &
 	
 	# wrap the command in a second subshell and redirect its output to hide job ID and PID
-	((evtest /dev/input/event0 | grep "^Event:" &> "$KEYCKTMP_FILE") &) > /dev/null 2>&1
+	if [[ "$archCur" == "pager" ]] ; then
+		((evtest /dev/input/event0 | grep "^Event:" &> "$KEYCKTMP_FILE") &) > /dev/null 2>&1
+	else 
+		trap start_cancelscan SIGINT
+	fi
 }
+
 # check pause/cancel
 check_cancel() {
 	# LOG "checking pause/cancel"
@@ -2081,9 +2150,9 @@ check_cancel() {
 	
 	# confirm cancel is pressed
 	# if grep -Eq "\\(BTN_EAST\\), value 1" "$KEYCKTMP_FILE"; then
-	if grep -q "(BTN_EAST), value 1" "$KEYCKTMP_FILE"; then
+	if [[ -s "$KEYCKTMP_FILE" ]] && grep -q "(BTN_EAST), value 1" "$KEYCKTMP_FILE"; then
 		# LOG "found"
-		killall evtest 2>/dev/null
+		if [[ "$archCur" == "pager" ]] ; then killall evtest 2>/dev/null; fi
 		# empty file
 		:> "$KEYCKTMP_FILE"
 		cancel_press=1
@@ -2099,6 +2168,7 @@ check_cancel() {
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 			cancel_app=1
 			cancel_press=0
+			trap cleanup SIGINT
 		else 
 			sleep 1
 			# restart evtest
@@ -2405,6 +2475,10 @@ bt_get_info() {
 bt_get_vendor() {
 	# LOG "bt_get_vendor"
 	# /lib/hak5/oui.txt
+	local ouifile="/lib/hak5/oui.txt"
+	if [[ "$archCur" != "pager" ]] ; then
+		ouifile="/var/lib/ieee-data/oui.txt"
+	fi
 	target_mac_check
 	if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$target_mac"; target_mac="${target_mac:0:2}:░░:░░:░░:░░:░░"; fi
 	resp=$(CONFIRMATION_DIALOG "Confirm Get Vendor on ${target_mac} ?")
@@ -2428,7 +2502,7 @@ bt_get_vendor() {
 		printf "═════════════════════════════════════════════════\n" >> "$REPORT_PROBE_FILE"
 		
 		LOG blue "===================================== Output ===="
-		if target_oui_line=$(grep -E "$target_oui" "/lib/hak5/oui.txt"); then
+		if target_oui_line=$(grep -E "$target_oui" "$ouifile"); then
 			# replace OUI in line
 			target_oui_vendor="${target_oui_line/$target_oui/}"
 			if [[ "$scan_privacy" -eq 1 ]] ; then target_mac="$priv_mac_save"; fi
