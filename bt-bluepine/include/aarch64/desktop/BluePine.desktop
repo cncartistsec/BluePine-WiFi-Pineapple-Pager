@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=BluePine
+Type=Application
+Terminal=true
+Exec=x-terminal-emulator -e bash -c "sudo /home/admin/paybash/bt-bluepine/payload.sh; exec bash"
+Path=/home/admin/paybash/bt-bluepine/
+Icon=/home/admin/paybash/bt-bluepine/include/aarch64/desktop/bluepineicon.png
