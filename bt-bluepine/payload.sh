@@ -3,7 +3,7 @@
 # Author: cncartist
 # Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.3
+# Version: 1.4
 # 
 # ============================================
 # Acknowledgements: 
@@ -13,11 +13,11 @@
 # Zombie UFO Theme - Author: Zombie Joe - (theme support & testing)
 # toggle_ab_leds - https://github.com/jader242 - (stealth mode inspiration)
 # https://www.rapidtables.com/code/text/ascii-table.html - (acsii verification for logo)
-# https://github.com/judcrandall/lookout.py/tree/main - (Axon OUI)
+# https://github.com/judcrandall/lookout.py - (Axon OUI)
 # Fuzz_Finder - Author: OSINTI4L - (Axon OUIs)
-# https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE/tree/main - (CC Skimmer Data)
-# https://github.com/colonelpanichacks/flock-you/tree/main - (Flock OUIs + Names)
-# StamenScan - Author: FusedStamen - https://github.com/FusedStamen/StamenScan/tree/main - (MAC filter idea)
+# https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE - (CC Skimmer Data)
+# https://github.com/colonelpanichacks/flock-you - (Flock OUIs + Names)
+# StamenScan - Author: FusedStamen - https://github.com/FusedStamen/StamenScan - (MAC filter idea)
 # 
 # ============================================
 # Includes: 
@@ -73,6 +73,13 @@
 #  -- Dependencies / Ringtones:
 #  -- -- -- evtest and GNU Grep are required dependencies, will install automatically if confirmed
 #  -- -- -- Will check for ringtones at start and copy if confirmed
+#  -- AArch64/ARM64/Debian Support
+#  -- -- -- Tested on ClockworkPi (Trixie) & Hackberry (Kali) and should work on other Raspberry Pi based systems.
+#  -- -- -- Support files are not included with the pager payload from the official repo, they can be found at: 
+#  -- -- -- https://github.com/cncartistsec/BluePine-WiFi-Pineapple-Pager/tree/main/bt-bluepine/include
+#  -- -- -- Required files in "include/aarch64" folder, desktop shortcut/icon included.
+#  -- -- -- Included to convert DuckyScript commands utilized for usage on generic Debian/Bash terminals.
+#  -- -- -- Loot/Reports are stored relative to the script directory, in the 'loot' folder.
 # 
 # ============================================
 # Notes:
@@ -145,6 +152,8 @@
 # 
 # Saved Targets File: "/root/loot/csec/bt-bluepine/targets/SavedTargets.txt"
 # Last Target File (MAC only): "/root/loot/csec/bt-bluepine/targets/LastTarget.txt"
+# 
+# NOTE: AArch64/ARM64/Debian - Loot/Reports are stored relative to the script directory, in the 'loot' folder.
 # ============================================
 #             SCAN LED STATUS
 # ============================================
@@ -174,6 +183,7 @@
 # ============================================
 #            Version History
 # ============================================
+# v1.4 -- AArch64/ARM64/Debian Support
 # v1.3 -- Filtering Options + Scantime Tracking
 # v1.2 -- GPS Updates + Bug Fixes
 # v1.1 -- Configuration Saving + Added Functionality
@@ -184,15 +194,56 @@
 # build log viewer in?
 # change actual sound setting for system/alerts?
 # implement sql lite db instead of current method?
+# add node support for other data source?
+# add more detections/detection based on UUID?
 # ============================================
 # 
+
+# Check architecture
+archCur="pager"
+architecture_check() {
+	local arch=$(uname -m)
+    case "$arch" in
+        "mips") archCur="pager" ;;
+        "aarch64") archCur="aarch64" ;;
+        *) archCur="unknown" ;;
+    esac
+}
+architecture_check
+
+# set architecture defaults
+servicebt_cur="bluetoothd"
+if [[ "$archCur" == "pager" ]] ; then
+	LOOT_DIR="/root/loot/csec/bt-bluepine"
+else
+	# AArch64/ARM64/Debian Support
+	# Files are not included with the pager payload, they can be found at: 
+	# https://github.com/cncartistsec/BluePine-WiFi-Pineapple-Pager/tree/main/bt-bluepine/include
+	# if not running on the pager, check if script is running as root
+	if [[ $EUID -ne 0 ]] ; then
+		NC='\033[0m'
+		colorcode='\033[1;91m' # red
+		echo -e "${colorcode}===================== ERROR =====================${NC}"
+		echo "This script must be run as root."
+		echo -e "${colorcode}=================================================${NC}"
+		echo "BluePine is originally built for the Hak5 WiFi Pineapple Pager and all scripts are run as root on that device."
+		echo "Please feel free to inspect the code and be assured everything is run locally/relative to the base of 'payload.sh'."
+		echo -e "${colorcode}=================================================${NC}"
+		exit 1
+	fi
+	LOOT_DIR="./loot"
+	servicebt_cur="bluetooth"
+	source "./include/aarch64/funcs_duck.sh" # load funcs
+fi
+
 # Include the function files   # or #        . "./file1.sh"
 source "./include/funcs_main.sh"
 source "./include/funcs_menu.sh"
 source "./include/funcs_scan.sh"
+# source "./include/funcs_extl.sh"
 
 # ---- CONFIG ----
-LOOT_DIR="/root/loot/csec/bt-bluepine"; LOOT_SCAN="${LOOT_DIR}/scan"; LOOT_DETECT="${LOOT_DIR}/detect"; LOOT_PROBE="${LOOT_DIR}/probe"; LOOT_TARGETS="${LOOT_DIR}/targets"; LOOT_CONFIG="${LOOT_DIR}/config"
+LOOT_SCAN="${LOOT_DIR}/scan"; LOOT_DETECT="${LOOT_DIR}/detect"; LOOT_PROBE="${LOOT_DIR}/probe"; LOOT_TARGETS="${LOOT_DIR}/targets"; LOOT_CONFIG="${LOOT_DIR}/config"
 mkdir -p "$LOOT_DIR"; mkdir -p "$LOOT_SCAN"; mkdir -p "$LOOT_DETECT"; mkdir -p "$LOOT_PROBE"; mkdir -p "$LOOT_TARGETS"; mkdir -p "$LOOT_CONFIG"
 TIMESTAMP=$(date +"%Y-%m-%d_%H%M%S")
 REPORT_FILE="$LOOT_SCAN/Report_${TIMESTAMP}.txt"
@@ -209,6 +260,11 @@ SAVEDTARGETS_FILE="$LOOT_TARGETS/SavedTargets.txt"
 TARGETMAC_FILE="$LOOT_CONFIG/LastTarget.txt"
 SAVEDCONFIG_FILE="$LOOT_CONFIG/savedconfig.json"
 KEYCKTMP_FILE="$LOOT_DIR/KeyCKTMP.txt"
+if [[ "$archCur" != "pager" ]] ; then
+	# need to be in root group to delete loot files from FTP on other arch
+	# RUN THIS to add to root group -> usermod -aG root <yourusername>
+	chmod -R 775 "$LOOT_DIR" # auto set loot dir to allow ftp edits if user in root group
+fi
 
 # ---- DEFAULTS ----
 scan_default="false"
@@ -304,16 +360,18 @@ VALID_MAC="([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}"
 cleanup() {
     killall hcitool 2>/dev/null
 	killall btmon 2>/dev/null
-	killall evtest 2>/dev/null
+	if [[ "$archCur" == "pager" ]] ; then
+		killall evtest 2>/dev/null
+		btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+		btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+		echo 1 > "$btn_a_path" 2>/dev/null
+		echo 1 > "$btn_b_path" 2>/dev/null
+	fi
 	rm "$DATASTREAMBT_FILE" 2>/dev/null
 	rm "$DATASTREAMBT2_FILE" 2>/dev/null
 	rm "$DATASTREAMBT3_FILE" 2>/dev/null
 	rm "$DATASTREAMBTTMP_FILE" 2>/dev/null
 	rm "$KEYCKTMP_FILE" 2>/dev/null
-	btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
-	btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
-	echo 1 > "$btn_a_path" 2>/dev/null
-	echo 1 > "$btn_b_path" 2>/dev/null
 	silent_backup=1
 	config_backup
     exit 0
@@ -392,16 +450,17 @@ filter_emptyoui=$(PAYLOAD_GET_CONFIG bluepinesuite filter_emptyoui)
 
 # check dependencies + ringtones
 check_dependencies
-if [[ "$skip_ask_ringtones" -eq 0 ]] ; then check_ringtones; fi
+if [[ "$skip_ask_ringtones" -eq 0 && "$archCur" == "pager" ]] ; then check_ringtones; fi
 # check config value versus found
 config_check
 # check settings
 settings_check
 
-# source "./include/funcs_extl.sh"
 # kill evtest if still running and rm old key file
-(killall evtest 2>/dev/null) &
-rm "$KEYCKTMP_FILE"
+if [[ "$archCur" == "pager" ]] ; then
+	(killall evtest 2>/dev/null) &
+fi
+rm "$KEYCKTMP_FILE" 2>/dev/null
 
 # check if file is not empty this time around
 if [[ -s "$TARGETMAC_FILE" ]]; then
@@ -696,14 +755,22 @@ while true; do
 						fi
 					elif [[ "$submenu_option" -eq 2 ]]; then
 						LOG "Change Bluetooth MAC / Alias...."
-						if hciconfig | grep -q hci1; then
-							if [[ "$enable_CSR_func" -eq 0 ]]; then
-								LOG red "WARNING: USB CSR BT not detected!"
-								LOG red "WARNING: Changing MAC on USB BT may not work!"
+						if [[ "$archCur" == "pager" ]] ; then
+							if hciconfig | grep -q hci1; then
+								if [[ "$enable_CSR_func" -eq 0 ]]; then
+									LOG red "WARNING: USB CSR BT not detected!"
+									LOG red "WARNING: Changing MAC on USB BT may not work!"
+								fi
+								update_bluetooth_mac "hci1"
+							else
+								LOG red "Bluetooth MAC cannot be changed for hci0!"
 							fi
-							update_bluetooth_mac "hci1"
 						else
-							LOG red "Bluetooth MAC cannot be changed for hci0!"
+							LOG red "WARNING: Changing MAC may not work if hardware does not support it!"
+							update_bluetooth_mac "hci0"
+							if hciconfig | grep -q hci1; then
+								update_bluetooth_mac "hci1"
+							fi
 						fi
 					elif [[ "$submenu_option" -eq 3 ]]; then
 						LOG "Change Bluetooth Status / Discovery Setting...."
@@ -813,14 +880,16 @@ while true; do
 						custom_oui=""
 						custom_name=""
 						LED MAGENTA
-						btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
-						btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
-						btn_a_state=$(cat "$btn_a_path")
-						btn_b_state=$(cat "$btn_b_path")
-						if [ "$btn_a_state" -eq 0 ] || [ "$btn_b_state" -eq 0 ] ; then
-							echo 1 > "$btn_a_path"
-							echo 1 > "$btn_b_path"
-							# LOG "A + B Button LEDS restored..."
+						if [[ "$archCur" == "pager" ]] ; then
+							btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+							btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+							btn_a_state=$(cat "$btn_a_path")
+							btn_b_state=$(cat "$btn_b_path")
+							if [ "$btn_a_state" -eq 0 ] || [ "$btn_b_state" -eq 0 ] ; then
+								echo 1 > "$btn_a_path"
+								echo 1 > "$btn_b_path"
+								# LOG "A + B Button LEDS restored..."
+							fi
 						fi
 						# save config
 						PAYLOAD_SET_CONFIG bluepinesuite DATA_SCAN_SECONDS "$DATA_SCAN_SECONDS"
