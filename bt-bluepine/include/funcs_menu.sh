@@ -1,7 +1,7 @@
 #!/bin/bash
 # Menu Functions for BluePine
 # Author: cncartist
-# Version: 1.3
+# Version: 1.4
 # 
 # check_dependencies
 # check_ringtones
@@ -44,30 +44,39 @@
 check_dependencies() {
 	if ! command -v hciconfig &> /dev/null; then
 		ERROR_DIALOG "hciconfig not installed"
-		LOG red "Install with: opkg update && opkg install bluez-utils"
+		if [[ "$archCur" == "pager" ]] ; then
+			LOG red "Install with: opkg update && opkg install bluez-utils"
+		else
+			LOG red "Install with: apt update && apt install bluez-utils"
+		fi
 		exit 1
 	fi
 	if ! command -v btmon &> /dev/null; then
 		ERROR_DIALOG "btmon not installed"
-		LOG red "Install with: opkg update && opkg install bluez-utils"
+		if [[ "$archCur" == "pager" ]] ; then
+			LOG red "Install with: opkg update && opkg install bluez-utils"
+		else
+			LOG red "Install with: apt update && apt install bluez-utils"
+		fi
 		exit 1
 	fi
 	if ! command -v bluetoothctl &> /dev/null; then
 		ERROR_DIALOG "bluetoothctl not installed"
-		LOG red "Install with: opkg update && opkg install bluez-utils"
+		if [[ "$archCur" == "pager" ]] ; then
+			LOG red "Install with: opkg update && opkg install bluez-utils"
+		else
+			LOG red "Install with: apt update && apt install bluez-utils"
+		fi
 		exit 1
 	fi
+	
 	# ORIGINAL <root> grep -V
 	# grep: unrecognized option: V
 	# BusyBox v1.36.1 (2025-04-13 16:38:32 UTC) multi-call binary.
 	# 
 	# NEW <root> grep -V
 	# grep (GNU grep) 3.11
-	local evtestCheck=0; local grepCheck=0; local count=0; local limit=3; local substring="BusyBox v"; local substring2='grep (GNU grep)'
-	# check evtest
-	if command -v evtest &> /dev/null; then
-		evtestCheck=1
-	fi
+	local evtestCheck=0; local grepCheck=0; local jqCheck=0; local ouiCheck=0; local count=0; local limit=3; local substring="BusyBox v"; local substring2='grep (GNU grep)'
 	# check grep
 	while IFS= read -r line && [[ "$count" -lt "$limit" ]] ; do
 		if [[ "$line" == *"$substring2"* ]]; then
@@ -78,7 +87,25 @@ check_dependencies() {
 	done < <(
 		grep -V
 	)
-	if [[ "$grepCheck" -eq 0 || "$evtestCheck" -eq 0 ]]; then
+	if [[ "$archCur" == "pager" ]] ; then
+		jqCheck=1
+		ouiCheck=1
+		# check evtest
+		if command -v evtest &> /dev/null; then
+			evtestCheck=1
+		fi
+	else
+		evtestCheck=1
+		# check jq
+		if command -v jq &> /dev/null; then
+			jqCheck=1
+		fi
+		# check oui data
+		if [[ -f "/var/lib/ieee-data/oui.txt" ]] ; then
+			ouiCheck=1
+		fi
+	fi
+	if [[ "$grepCheck" -eq 0 || "$evtestCheck" -eq 0  || "$jqCheck" -eq 0  || "$ouiCheck" -eq 0 ]]; then
 		local dependText=""
 		# ask if they want to install now
 		# without grep the app will run but, device names will show as "Unknown"
@@ -94,44 +121,101 @@ check_dependencies() {
 				dependText="evtest"
 			fi
 		fi
+		if [[ "$jqCheck" -eq 0 ]]; then
+			if [[ -n "$dependText" ]]; then
+				dependText="${dependText} & jq"
+			else
+				dependText="jq"
+			fi
+		fi
+		if [[ "$ouiCheck" -eq 0 ]]; then
+			if [[ -n "$dependText" ]]; then
+				dependText="${dependText} & ieee-data"
+			else
+				dependText="ieee-data"
+			fi
+		fi
 		resp=$(CONFIRMATION_DIALOG "Dependency not met!
 		
-		Required: $dependText
+Required: $dependText
 		
-		Install automatically now?")
+Install automatically now?")
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 			LOG blue  "================================================="
 			LOG "Starting package install..."
 			sleep 1
 			count=0
-			while [[ -f "/var/lock/opkg.lock" ]] && [[ "$count" -lt 3 ]] ; do
-				LOG red "Opkg currently locked by a process. Waiting..."
-				sleep 5
-				count=$((count + 1))
-			done
-			# Check WiFi Client Mode enabled
+			if [[ "$archCur" == "pager" ]] ; then
+				while [[ -f "/var/lock/opkg.lock" ]] && [[ "$count" -lt 3 ]] ; do
+					LOG red "Opkg currently locked by a process. Waiting..."
+					sleep 5
+					count=$((count + 1))
+				done
+			else
+				while [[ "$count" -lt 3 ]] ; do
+					if ps aux | grep -i [a]pt > /dev/null; then
+						LOG red "Apt currently locked by a process. Waiting..."
+						sleep 5
+						count=$((count + 1))
+					else
+						# echo "No update/upgrade running"
+						break
+					fi
+				done
+			fi
+			# Check Network enabled
 			count=1 # Number of packets to send
 			timeout=3 # Seconds to wait for a response
 			if ping -c $count -w $timeout "8.8.8.8" > /dev/null 2>&1; then
 				LOG "Network connection is active..."
-				LOG "Running 'opkg update'"
-				LOG "Please wait..."
-				# opkg update && opkg install grep
-				if opkg update; then
-					LOG green "'opkg update' successful."
-					if [[ "$grepCheck" -eq 0 ]]; then
-						LOG "Installing GNU grep..."
-						LOG "Please wait..."
-						opkg install grep
-					fi
-					if [[ "$evtestCheck" -eq 0 ]]; then
-						LOG "Installing evtest..."
-						LOG "Please wait..."
-						opkg install evtest
-					fi
-					LOG green "Packages installed!"
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG "Running 'opkg update'"
 				else
-					LOG red "'opkg update' failed. Check network..."
+					LOG "Running 'apt update'"
+				fi
+				LOG "Please wait..."
+				if [[ "$archCur" == "pager" ]] ; then
+					# opkg update && opkg install grep
+					if opkg update; then
+						LOG green "'opkg update' successful."
+						if [[ "$grepCheck" -eq 0 ]]; then
+							LOG "Installing GNU grep..."
+							LOG "Please wait..."
+							opkg install grep
+						fi
+						if [[ "$evtestCheck" -eq 0 ]]; then
+							LOG "Installing evtest..."
+							LOG "Please wait..."
+							opkg install evtest
+						fi
+						LOG green "Packages installed!"
+					else
+						LOG red "'opkg update' failed. Check network..."
+					fi
+				else
+					# apt update && apt install grep
+					if apt update; then
+						LOG green "'apt update' successful."
+						if [[ "$grepCheck" -eq 0 ]]; then
+							LOG "Installing GNU grep..."
+							LOG "Please wait..."
+							apt install grep -y
+						fi
+						if [[ "$jqCheck" -eq 0 ]]; then
+							LOG "Installing jq..."
+							LOG "Please wait..."
+							apt install jq -y
+						fi
+						if [[ "$ouiCheck" -eq 0 ]]; then
+							LOG "Installing ieee-data..."
+							LOG "Please wait..."
+							apt install ieee-data -y
+							update-ieee-data
+						fi
+						LOG green "Packages installed!"
+					else
+						LOG red "'apt update' failed. Check network..."
+					fi
 				fi
 			else
 				LOG red "Network connection is down..."
@@ -140,17 +224,27 @@ check_dependencies() {
 		else
 			ERROR_DIALOG "Dependency not met:
 			
-			Required: $dependText not installed!"
+Required: $dependText not installed!"
 			LOG red   "===================================== CRITICAL =="
 			LOG red   "== Dependency not met: $dependText"
 			LOG red   "===================================== CRITICAL =="
 			LOG cyan "== Install with ->"
-			LOG "opkg update"
-			LOG "opkg install grep"
-			LOG "opkg install evtest"
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "opkg update"
+				LOG "opkg install grep"
+				LOG "opkg install evtest"
+			else
+				LOG "apt update"
+				LOG "apt install grep jq ieee-data"
+				LOG "update-ieee-data"
+			fi
 			LOG blue  "================================================="
 			LOG cyan "== Or all in one command ->"
-			LOG "opkg update && opkg install grep && opkg install evtest"
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "opkg update && opkg install grep && opkg install evtest"
+			else
+				LOG "apt update && apt install grep jq ieee-data -y && update-ieee-data"
+			fi
 			LOG blue  "================================================="
 			sleep 1
 			exit 1
@@ -178,9 +272,9 @@ check_ringtones() {
 		LOG "Sound Effects / Ringtones missing..."
 		resp=$(CONFIRMATION_DIALOG "ALERT! 
 
-									$count Sound Effects / Ringtones are missing from your ringtone dir.
+$count Sound Effects / Ringtones are missing from your ringtone dir.
 		
-									Copy them to your pagers ringtone dir for an optimal experience?")
+Copy them to your pagers ringtone dir for an optimal experience?")
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 			LOG "Copying Sound Effects / Ringtones..."
 			for FILE_NAME in "${FILES[@]}"; do
@@ -222,7 +316,13 @@ check_ringtones() {
 
 # External Bluetooth Adapter?
 external_bt_check() {
-	resp=$(CONFIRMATION_DIALOG "Do you have USB/External Bluetooth enabled & plugged in?")
+	# Bluetooth: Can't init device hci1: Operation not possible due to RF-kill (132)
+	# possible to need to turn off bluetooth and back on to allow adapter to be enabled
+	if hciconfig | grep -q hci1; then
+		resp=$(CONFIRMATION_DIALOG "Do you have USB/External Bluetooth enabled & plugged in?")
+	else
+		resp='n'
+	fi
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		if hciconfig | grep -q hci1; then
 			BLE_IFACE="hci1"
@@ -231,10 +331,6 @@ external_bt_check() {
 			if [[ -z "$CSR_CHECK" ]]; then
 				# try to bring up adapter if possibly down, MFR doesnt show when down
 				# LOG red "RUNNING SECONDARY CHECK"
-				# hciconfig $BLE_IFACE down 2>/dev/null
-				# sleep 1
-				# hciconfig $BLE_IFACE up 2>/dev/null
-				# sleep 1
 				loop=0
 				while true; do
 					# LOG red "in loop"
@@ -275,9 +371,15 @@ external_bt_check() {
 				LOG red   "========= Functionality may be limited! ========="
 				LOG blue  "================================================="
 				LOG " "
-				LOG magenta "Have CSR BT but booted Pager with USB plugged in?"
-				LOG cyan "If so, please reboot the Pager without USB BT."
-				LOG cyan "Then Plugin USB BT after boot..."
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG magenta "Have CSR BT but booted Pager with USB plugged in?"
+					LOG cyan "If so, please reboot the Pager without USB BT."
+					LOG cyan "Then Plugin USB BT after boot..."
+				else
+					LOG magenta "Have External Bluetooth but Adapter Down from 'rfkill'?"
+					LOG cyan "Check with: 'sudo hciconfig hci1 up'"
+					LOG cyan "If so, turn off Bluetooth and back on via desktop taskbar and 'Retest CSR'."
+				fi
 				LOG " "
 				LOG magenta  "Also try unplugging and replugging USB BT, then"
 				LOG magenta  "Re-check at Preferences > Bluetooth > Retest CSR"
@@ -301,6 +403,7 @@ external_bt_check() {
 		fi
 	else
 		BLE_IFACE="hci0"
+		LOG blue  "========== Using $BLE_IFACE / Default Device =========="
 	fi
 	if [[ "$BLE_IFACE" == "hci0" ]]; then
 		rssitxt_switch="rssitxtsw_hci0"
@@ -320,10 +423,10 @@ bluetoothd_check() {
 	while true; do
 		# LOG red "in loop"
 		loop=$((loop + 1))
-		if service bluetoothd status | grep -q "not"; then
+		if service $servicebt_cur status | grep -q "not"; then
 			# echo "NOT RUNNING"
 			# echo "trying restart..."
-			service bluetoothd restart
+			service $servicebt_cur restart
 			sleep 1
 			if [[ "$loop" -eq 5 ]] ; then
 				# echo "== NOT RUNNING after $loop tries! ==="
@@ -463,7 +566,7 @@ scantype_config() {
 scantime_config() {
 	# ASK HOW MANY SECONDS TO SCAN - $DATA_SCAN_SECONDS
 	# Longer times = larger file
-	DATA_SCAN_SECONDS=$(NUMBER_PICKER "Scan duration (seconds):" $DATA_SCAN_SECONDS)
+	DATA_SCAN_SECONDS=$(NUMBER_PICKER "Scan duration (seconds)" $DATA_SCAN_SECONDS)
 	case $? in $DUCKYSCRIPT_CANCELLED|$DUCKYSCRIPT_REJECTED) DATA_SCAN_SECONDS=$DATA_SCAN_SECONDS ;; esac
 	[ $DATA_SCAN_SECONDS -lt 3 ] && DATA_SCAN_SECONDS=3
 	[ $DATA_SCAN_SECONDS -gt 20 ] && DATA_SCAN_SECONDS=20
@@ -551,48 +654,57 @@ stealth_config() {
 		settings_check
 		LOG "Stealth Mode Enabled..."
 		LOG "Sound Effects Off..."
-		LOG "LEDS Turned Off..."
-		LOG "A + B Button LEDS Turned Off..."
-		LOG "Payload LED Actions Disabled..."
+		if [[ "$archCur" == "pager" ]] ; then
+			LOG "LEDS Turned Off..."
+			LOG "A + B Button LEDS Turned Off..."
+			LOG "Payload LED Actions Disabled..."
+		fi
 	else
 		scan_mute="false"
 		scan_stealth=0
 		LED MAGENTA
 		LOG "Stealth Mode Disabled..."
 		LOG "Sound Effects On..."
-		LOG "LEDS Turned On..."
-		btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
-		btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
-		btn_a_state=$(cat "$btn_a_path")
-		btn_b_state=$(cat "$btn_b_path")
-		if [[ "$btn_a_state" -eq 0 || "$btn_b_state" -eq 0 ]] ; then
-			# LOG "Restoring A + B Button LEDS..."
-			echo 1 > "$btn_a_path"
-			echo 1 > "$btn_b_path"
-			LOG "A + B Button LEDS restored..."
+		if [[ "$archCur" == "pager" ]] ; then
+			LOG "LEDS Turned On..."
+			btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+			btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+			btn_a_state=$(cat "$btn_a_path")
+			btn_b_state=$(cat "$btn_b_path")
+			if [[ "$btn_a_state" -eq 0 || "$btn_b_state" -eq 0 ]] ; then
+				# LOG "Restoring A + B Button LEDS..."
+				echo 1 > "$btn_a_path"
+				echo 1 > "$btn_b_path"
+				LOG "A + B Button LEDS restored..."
+			fi
+			LOG "Payload LED Actions Enabled..."
 		fi
-		LOG "Payload LED Actions Enabled..."
 	fi
 	PAYLOAD_SET_CONFIG bluepinesuite scan_stealth "$scan_stealth"
 	PAYLOAD_SET_CONFIG bluepinesuite scan_mute "$scan_mute"
 	LOG " "
 }
 restore_ableds() {
-	resp=$(CONFIRMATION_DIALOG "Restore A + B Button LEDS?")
-	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-		# LOG "Restoring A + B Button LEDS..."
-		btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
-		btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
-		btn_a_state=$(cat "$btn_a_path")
-		btn_b_state=$(cat "$btn_b_path")
-		if [[ "$btn_a_state" -eq 0 || "$btn_b_state" -eq 0 ]] ; then
+	if [[ "$archCur" == "pager" ]] ; then
+		resp=$(CONFIRMATION_DIALOG "Restore A + B Button LEDS?")
+		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 			# LOG "Restoring A + B Button LEDS..."
-			echo 1 > "$btn_a_path"
-			echo 1 > "$btn_b_path"
-			LOG "A + B Button LEDS restored..."
-		else
-			LOG "A + B Button LEDS already on..."
+			btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+			btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+			btn_a_state=$(cat "$btn_a_path")
+			btn_b_state=$(cat "$btn_b_path")
+			if [[ "$btn_a_state" -eq 0 || "$btn_b_state" -eq 0 ]] ; then
+				# LOG "Restoring A + B Button LEDS..."
+				echo 1 > "$btn_a_path"
+				echo 1 > "$btn_b_path"
+				LOG "A + B Button LEDS restored..."
+			else
+				LOG "A + B Button LEDS already on..."
+			fi
+			LOG " "
 		fi
+	else
+		LOG red "Setting only available on Pager currently..."
 		LOG " "
 	fi
 }
@@ -617,38 +729,38 @@ filter_config() {
 			PROMPT "Filters Currently Removing MACs with:
 			
 			
-			First Octet Matching: 01, 02, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF
+First Octet Matching: 01, 02, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF
 			
-			First Octet Matching (x = Wildcard):
-			x2, x3, x6, x7, xA, xB, xE, xF
+First Octet Matching (x = Wildcard):
+x2, x3, x6, x7, xA, xB, xE, xF
 			
-			OUI Matching: '00:00:00'"
+OUI Matching: '00:00:00'"
 		else
 			LOG blue "================================================="
 			LOG cyan "Filters Currently Removing MACs with:"
 			LOG blue "================================================="
 			filterText="Filters Currently Removing MACs with:
-			"
+"
 			if [[ "$filter_multilocal" -eq 1 && "$filter_multiall" -eq 1 ]] ; then
 				LOG "First Octet Matching: 01, 02, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
 				LOG blue "================================================="
 				filterText="${filterText}
 				
-				First Octet Matching: 01, 02, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
+First Octet Matching: 01, 02, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
 			else
 				if [[ "$filter_multilocal" -eq 1 ]] ; then
 					LOG "First Octet Matching: 01, 02"
 					LOG blue "================================================="
 					filterText="${filterText}
 					
-					First Octet Matching: 01, 02"
+First Octet Matching: 01, 02"
 				fi
 				if [[ "$filter_multiall" -eq 1 ]] ; then
 					LOG "First Octet Matching: 01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
 					LOG blue "================================================="
 					filterText="${filterText}
 					
-					First Octet Matching: 01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
+First Octet Matching: 01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF"
 				fi
 			fi
 			if [[ "$filter_localall" -eq 1 && "$filter_randomall" -eq 1 ]] ; then
@@ -656,24 +768,24 @@ filter_config() {
 				LOG blue "================================================="
 				filterText="${filterText}
 				
-				First Octet Matching (x = Wildcard):
-				x2, x3, x6, x7, xA, xB, xE, xF"
+First Octet Matching (x = Wildcard):
+x2, x3, x6, x7, xA, xB, xE, xF"
 			else
 				if [[ "$filter_localall" -eq 1 ]] ; then
 					LOG "First Octet Matching (x = Wildcard): x2, x6, xA, xE"
 					LOG blue "================================================="
 					filterText="${filterText}
 					
-					First Octet Matching (x = Wildcard):
-					x2, x6, xA, xE"
+First Octet Matching (x = Wildcard):
+x2, x6, xA, xE"
 				fi
 				if [[ "$filter_randomall" -eq 1 ]] ; then
 					LOG "First Octet Matching (x = Wildcard): x3, x7, xB, xF"
 					LOG blue "================================================="
 					filterText="${filterText}
 					
-					First Octet Matching (x = Wildcard):
-					x3, x7, xB, xF"
+First Octet Matching (x = Wildcard):
+x3, x7, xB, xF"
 				fi
 			fi
 			if [[ "$filter_emptyoui" -eq 1 ]] ; then
@@ -681,14 +793,14 @@ filter_config() {
 				LOG blue "================================================="
 				filterText="${filterText}
 				
-				OUI Matching: '00:00:00'"
+OUI Matching: '00:00:00'"
 			fi
 			PROMPT "$filterText"
 		fi
 		
 		resp=$(CONFIRMATION_DIALOG "Filter(s) currently Enabled!
 		
-		Disable All Filters for Device ${text_hunt_UC}er Scan, allowing all ${text_target_UC}s/MACs to be visible again?")
+Disable All Filters for Device ${text_hunt_UC}er Scan, allowing all ${text_target_UC}s/MACs to be visible again?")
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 			filters_disabled=1
 			LOG "Disabling All Filters..."
@@ -709,9 +821,9 @@ filter_config() {
 	if [[ "$filters_disabled" -eq 0 ]] ; then
 		resp=$(CONFIRMATION_DIALOG "Modify Filters for Device ${text_hunt_UC}er Scan?
 		
-		Adding Filters allows faster processing, removes ${text_target_LC}s from results, and helps if you know which MACs you are searching for.
+Adding Filters allows faster processing, removes ${text_target_LC}s from results, and helps if you know which MACs you are searching for.
 		
-		WARNING: Filters REMOVE real ${text_target_LC}s from report/display and only applies to non-targeted scans!")
+WARNING: Filters REMOVE real ${text_target_LC}s from report/display and only applies to non-targeted scans!")
 		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 			LOG "Modifying Filters..."
 			emptyoui_config
@@ -728,7 +840,7 @@ filter_config() {
 multilocal_config() {
 	resp=$(CONFIRMATION_DIALOG "Basic Filter:
 	
-	Remove Multicast (01) & Locally Administered (02) MACs?")
+Remove Multicast (01) & Locally Administered (02) MACs?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		filter_multilocal=1
 		LOG "Filter Multicast/Locally Admin. Enabled..."
@@ -741,7 +853,7 @@ multilocal_config() {
 emptyoui_config() {
 	resp=$(CONFIRMATION_DIALOG "OUI Filter:
 	
-	Remove Empty OUI (00:00:00) MACs?")
+Remove Empty OUI (00:00:00) MACs?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		filter_emptyoui=1
 		LOG "Filter Empty OUI (00:00:00) Enabled..."
@@ -754,7 +866,7 @@ emptyoui_config() {
 randomall_config() {
 	resp=$(CONFIRMATION_DIALOG "Multi Filter:
 	
-	Remove ALL Random (x3, x7, xB, xF) MACs?")
+Remove ALL Random (x3, x7, xB, xF) MACs?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		filter_randomall=1
 		LOG "Filter ALL Random Enabled..."
@@ -767,7 +879,7 @@ randomall_config() {
 localall_config() {
 	resp=$(CONFIRMATION_DIALOG "Multi Filter:
 	
-	Remove ALL Locally Administered (x2, x6, xA, xE) MACs?")
+Remove ALL Locally Administered (x2, x6, xA, xE) MACs?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		filter_localall=1
 		LOG "Filter ALL Locally Admin. Enabled..."
@@ -780,7 +892,7 @@ localall_config() {
 multiall_config() {
 	resp=$(CONFIRMATION_DIALOG "Multi Filter:
 	
-	Remove ALL Multicast (01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF) MACs?")
+Remove ALL Multicast (01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF) MACs?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		filter_multiall=1
 		LOG "Filter ALL Multicast Enabled..."
@@ -810,22 +922,34 @@ enter_custom_oui() {
 	resp=$(CONFIRMATION_DIALOG "Enter/Edit Custom OUI?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		if [[ -n "$custom_oui" ]] ; then
-			custom_oui="${custom_oui}:00:00:00"
+			if [[ "$archCur" == "pager" ]] ; then
+				custom_oui="${custom_oui}:00:00:00"
+			fi
 		fi
 		NEW_MAC="$custom_oui"
 		if [[ -n "$custom_oui" ]] && [[ "$scan_privacy" -eq 1 ]] ; then
 			NEW_MAC="$priv_mac_num"
 		fi
-		LOG magenta "Please enter 00:00:00 for end of OUI..."
+		if [[ "$archCur" == "pager" ]] ; then
+			LOG magenta "Please enter 00:00:00 for end of OUI..."
+		fi
 		LOG "Press OK to confirm..."
 		LOG " "
 		WAIT_FOR_BUTTON_PRESS A
 		
 		while true; do
 			# run input
+			if [[ "$archCur" != "pager" ]] ; then
+				NEW_MAC="${NEW_MAC:0:8}"
+			fi
 			NEW_MAC=$(MAC_PICKER "Custom OUI" "$NEW_MAC")
-			NEW_OUI="${NEW_MAC:0:8}"
-			# Confirm Random OUI sufficient
+			if [[ "$archCur" == "pager" ]] ; then
+				NEW_OUI="${NEW_MAC:0:8}"
+			else
+				NEW_OUI="${NEW_MAC}"
+				NEW_MAC="${NEW_MAC}:00:00:00"
+			fi
+			# Confirm Custom OUI sufficient
 			if [[ "$NEW_MAC" =~ $VALID_MAC ]]; then
 				resp=$(CONFIRMATION_DIALOG "This Custom OUI OK? ${NEW_OUI}")
 				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
@@ -937,13 +1061,27 @@ main_menu() {
 	
 	if [[ "$scan_privacy" -eq 1 ]] ; then target_mac="$priv_mac_save"; fi
 	LOG magenta "================================== Main Menu ===="
-	LOG "0: Exit BluePine"
-	LOG green "Press OK..."
-	# LOG " "
-	WAIT_FOR_BUTTON_PRESS A
-	sleep 0.5
-	# can anyone recommend me a better way to do this than eval?
-	resp=$(eval "LIST_PICKER $text_pick_str")
+	if [[ "$archCur" == "pager" ]] ; then
+		LOG "0: Exit BluePine"
+		LOG green "Press OK..."
+		# LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.5
+		# can anyone recommend a better way to do this?
+		resp=$(eval "LIST_PICKER $text_pick_str")
+	else
+		LOG "${#MENU_ITEMS[@]}: Exit BluePine"
+		while true; do
+			read -e -p "Select an option [1-${#MENU_ITEMS[@]}]: " output
+			if [[ "$output" == "${#MENU_ITEMS[@]}" ]] ; then output=0; fi 
+			# echo "opt: ${MENU_ITEMS[$output]}"
+			case "$output" in
+				[1-9]) resp="${MENU_ITEMS[$output]}"; break ;;
+				0|10) resp="${MENU_ITEMS[$output]}"; break ;;
+				*) echo "Invalid option. Please try again." ;;
+			esac
+		done
+	fi
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1016,12 +1154,27 @@ sub_menu_detection() {
 	text_pick_str="${text_pick_str} \"${MENU_ITEMS[$defaultselnum]}\"" # add selected to final picker slot
 	
 	LOG magenta "================================== Detection ===="
-	LOG "0: Return to Main Menu"
-	LOG green "Press OK..."
-	WAIT_FOR_BUTTON_PRESS A
-	sleep 0.5
-	# can anyone recommend me a better way to do this than eval?
-	resp=$(eval "LIST_PICKER $text_pick_str")
+	if [[ "$archCur" == "pager" ]] ; then
+		LOG "0: Return to Main Menu"
+		LOG green "Press OK..."
+		LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.5
+		# can anyone recommend a better way to do this?
+		resp=$(eval "LIST_PICKER $text_pick_str")
+	else
+		LOG "${#MENU_ITEMS[@]}: Return to Main Menu"
+		while true; do
+			read -e -p "Select an option [1-${#MENU_ITEMS[@]}]: " output
+			if [[ "$output" == "${#MENU_ITEMS[@]}" ]] ; then output=0; fi 
+			# echo "opt: ${MENU_ITEMS[$output]}"
+			case "$output" in
+				[1-9]) resp="${MENU_ITEMS[$output]}"; break ;;
+				0|10|11) resp="${MENU_ITEMS[$output]}"; break ;;
+				*) echo "Invalid option. Please try again." ;;
+			esac
+		done
+	fi
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1040,7 +1193,6 @@ sub_menu_detection() {
 	esac
 	# LOG "Option $selnum selected..."
 	# LOG green "Press OK to continue..."; LOG " "; WAIT_FOR_BUTTON_PRESS A
-	LOG " "
 }
 
 # sub menu probe
@@ -1079,13 +1231,27 @@ sub_menu_probe() {
 		
 		if [[ "$scan_privacy" -eq 1 ]] ; then target_mac="$priv_mac_save"; fi
 		LOG magenta "====================================== Probe ===="
-		LOG "0: Return to Main Menu"
-		LOG green "Press OK..."
-		LOG " "
-		WAIT_FOR_BUTTON_PRESS A
-		sleep 0.5
-		# can anyone recommend me a better way to do this than eval?
-		resp=$(eval "LIST_PICKER $text_pick_str")
+		if [[ "$archCur" == "pager" ]] ; then
+			LOG "0: Return to Main Menu"
+			LOG green "Press OK..."
+			LOG " "
+			WAIT_FOR_BUTTON_PRESS A
+			sleep 0.5
+			# can anyone recommend a better way to do this?
+			resp=$(eval "LIST_PICKER $text_pick_str")
+		else
+			LOG "${#MENU_ITEMS[@]}: Return to Main Menu"
+			while true; do
+				read -e -p "Select an option [1-${#MENU_ITEMS[@]}]: " output
+				if [[ "$output" == "${#MENU_ITEMS[@]}" ]] ; then output=0; fi 
+				# echo "opt: ${MENU_ITEMS[$output]}"
+				case "$output" in
+					[1-${#MENU_ITEMS[@]}]) resp="${MENU_ITEMS[$output]}"; break ;;
+					0) resp="${MENU_ITEMS[$output]}"; break ;;
+					*) echo "Invalid option. Please try again." ;;
+				esac
+			done
+		fi
 		case "$resp" in
 			"${MENU_ITEMS[1]}") selnum=1 ;;
 			"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1149,12 +1315,27 @@ sub_menu_savedtargoptions() {
 	
 	if [[ "$scan_privacy" -eq 1 ]] ; then target_mac="$priv_mac_save"; fi
 	LOG magenta "======================= Manage Saved ${text_target_UC}s ===="
-	LOG "0: Return to Main Menu"
-	LOG green "Press OK..."
-	WAIT_FOR_BUTTON_PRESS A
-	sleep 0.5
-	# can anyone recommend me a better way to do this than eval?
-	resp=$(eval "LIST_PICKER $text_pick_str")
+	if [[ "$archCur" == "pager" ]] ; then
+		LOG "0: Return to Main Menu"
+		LOG green "Press OK..."
+		LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.5
+		# can anyone recommend a better way to do this?
+		resp=$(eval "LIST_PICKER $text_pick_str")
+	else
+		LOG "${#MENU_ITEMS[@]}: Return to Main Menu"
+		while true; do
+			read -e -p "Select an option [1-${#MENU_ITEMS[@]}]: " output
+			if [[ "$output" == "${#MENU_ITEMS[@]}" ]] ; then output=0; fi 
+			# echo "opt: ${MENU_ITEMS[$output]}"
+			case "$output" in
+				[1-9]) resp="${MENU_ITEMS[$output]}"; break ;;
+				0|10|11) resp="${MENU_ITEMS[$output]}"; break ;;
+				*) echo "Invalid option. Please try again." ;;
+			esac
+		done
+	fi
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1173,7 +1354,6 @@ sub_menu_savedtargoptions() {
 	esac
 	# LOG "Option $selnum selected..."
 	# LOG green "Press OK to continue..."; LOG " "; WAIT_FOR_BUTTON_PRESS A
-	LOG " "
 }
 
 
@@ -1211,13 +1391,27 @@ sub_menu_preferences() {
 	text_pick_str="${text_pick_str} \"${MENU_ITEMS[$defaultselnum]}\"" # add selected to final picker slot
 	
 	LOG magenta "================================ Preferences ===="
-	LOG "0: Return to Main Menu"
-	LOG green "Press OK..."
-	LOG " "
-	WAIT_FOR_BUTTON_PRESS A
-	sleep 0.5
-	# can anyone recommend me a better way to do this than eval?
-	resp=$(eval "LIST_PICKER $text_pick_str")
+	if [[ "$archCur" == "pager" ]] ; then
+		LOG "0: Return to Main Menu"
+		LOG green "Press OK..."
+		LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.5
+		# can anyone recommend a better way to do this?
+		resp=$(eval "LIST_PICKER $text_pick_str")
+	else
+		LOG "${#MENU_ITEMS[@]}: Return to Main Menu"
+		while true; do
+			read -e -p "Select an option [1-${#MENU_ITEMS[@]}]: " output
+			if [[ "$output" == "${#MENU_ITEMS[@]}" ]] ; then output=0; fi 
+			# echo "opt: ${MENU_ITEMS[$output]}"
+			case "$output" in
+				[1-${#MENU_ITEMS[@]}]) resp="${MENU_ITEMS[$output]}"; break ;;
+				0) resp="${MENU_ITEMS[$output]}"; break ;;
+				*) echo "Invalid option. Please try again." ;;
+			esac
+		done
+	fi
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1266,13 +1460,27 @@ sub_sub_menu_managebt() {
 	text_pick_str="${text_pick_str} \"${MENU_ITEMS[$defaultselnum]}\"" # add selected to final picker slot
 	
 	LOG magenta "=========================== Manage Bluetooth ===="
-	LOG "0: Return to Preferences"
-	LOG green "Press OK..."
-	LOG " "
-	WAIT_FOR_BUTTON_PRESS A
-	sleep 0.5
-	# can anyone recommend me a better way to do this than eval?
-	resp=$(eval "LIST_PICKER $text_pick_str")
+	if [[ "$archCur" == "pager" ]] ; then
+		LOG "0: Return to Preferences"
+		LOG green "Press OK..."
+		LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.5
+		# can anyone recommend a better way to do this?
+		resp=$(eval "LIST_PICKER $text_pick_str")
+	else
+		LOG "${#MENU_ITEMS[@]}: Return to Preferences"
+		while true; do
+			read -e -p "Select an option [1-${#MENU_ITEMS[@]}]: " output
+			if [[ "$output" == "${#MENU_ITEMS[@]}" ]] ; then output=0; fi 
+			# echo "opt: ${MENU_ITEMS[$output]}"
+			case "$output" in
+				[1-${#MENU_ITEMS[@]}]) resp="${MENU_ITEMS[$output]}"; break ;;
+				0) resp="${MENU_ITEMS[$output]}"; break ;;
+				*) echo "Invalid option. Please try again." ;;
+			esac
+		done
+	fi
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1319,13 +1527,27 @@ sub_sub_menu_extra() {
 	text_pick_str="${text_pick_str} \"${MENU_ITEMS[$defaultselnum]}\"" # add selected to final picker slot
 	
 	LOG magenta "====================================== Extra ===="
-	LOG "0: Return to Preferences"
-	LOG green "Press OK..."
-	LOG " "
-	WAIT_FOR_BUTTON_PRESS A
-	sleep 0.5
-	# can anyone recommend me a better way to do this than eval?
-	resp=$(eval "LIST_PICKER $text_pick_str")
+	if [[ "$archCur" == "pager" ]] ; then
+		LOG "0: Return to Preferences"
+		LOG green "Press OK..."
+		LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.5
+		# can anyone recommend a better way to do this?
+		resp=$(eval "LIST_PICKER $text_pick_str")
+	else
+		LOG "${#MENU_ITEMS[@]}: Return to Preferences"
+		while true; do
+			read -e -p "Select an option [1-${#MENU_ITEMS[@]}]: " output
+			if [[ "$output" == "${#MENU_ITEMS[@]}" ]] ; then output=0; fi 
+			# echo "opt: ${MENU_ITEMS[$output]}"
+			case "$output" in
+				[1-${#MENU_ITEMS[@]}]) resp="${MENU_ITEMS[$output]}"; break ;;
+				0) resp="${MENU_ITEMS[$output]}"; break ;;
+				*) echo "Invalid option. Please try again." ;;
+			esac
+		done
+	fi
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
