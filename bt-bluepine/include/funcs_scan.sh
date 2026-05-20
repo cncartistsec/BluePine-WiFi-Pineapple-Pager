@@ -1,7 +1,7 @@
 #!/bin/bash
 # Scan Functions for BluePine
 # Author: cncartist
-# Version: 1.3
+# Version: 1.4
 # 
 # reset_bt_adapter
 # rssitxtsw_hci0
@@ -173,8 +173,11 @@ rssitxtsw_hci1() {
 
 # Reset GPSD in case stale data persists
 reset_gpsd() {
-	/etc/init.d/gpsd reload 2>/dev/null
-	/etc/init.d/gpsd restart 2>/dev/null
+	# only reset for pager currently
+	if [[ "$archCur" == "pager" ]] ; then
+		/etc/init.d/gpsd reload 2>/dev/null
+		/etc/init.d/gpsd restart 2>/dev/null
+	fi
 }
 
 
@@ -354,9 +357,13 @@ device_hunter() {
 		fi
 		sleep 1 # give time for GPS_GET to catchup
 		if [[ "$scan_infrepeat" -eq 1 ]] ; then
-			LOG "Scanning... Press OK to pause/stop..."
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "Scanning... Press OK to pause/stop..."
+			else
+				LOG magenta "Press CTRL+C / CANCEL to pause/stop..."
+			fi
 		else
-			LOG "Scanning... Press BACK to stop..."
+			LOG "Scanning... Please wait..."
 		fi
 		sleep 1 # give time for GPS_GET to catchup
 		
@@ -431,7 +438,8 @@ device_hunter() {
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE SLOW; fi
 				# LOG red "hcitool"
 				# (timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan) &
-				(timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan --length=$DATA_SCAN_SECONDS) &
+				# (timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan --length=$DATA_SCAN_SECONDS) &
+				((timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan --length=$DATA_SCAN_SECONDS) &) > /dev/null 2>&1
 				# LOG red "sleep"
 				sleep ${DATA_SCAN_SECONDS}
 				if [[ "$scan_btle" == "true" ]] ; then
@@ -442,7 +450,8 @@ device_hunter() {
 			if [[ "$scan_btle" == "true" ]] ; then
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED CYAN SLOW; fi
 				#run le scan second	
-				(timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" lescan) &
+				# (timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" lescan) &
+				((timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" lescan) &) > /dev/null 2>&1
 				sleep ${DATA_SCAN_SECONDS}
 			fi
 			
@@ -856,7 +865,7 @@ device_hunter() {
 							# Parse Name/Data
 							# name=$((echo "${info[0]}" | grep -oP '(?<=Name ).*' || echo "Unknown") | cut -d' ' -f2)
 							name=$(echo "${info[0]}" | grep -oP '(?<=Name ).*' || echo "Unknown")
-							echo "Name= $name"
+							# echo "Name= $name"
 							if [[ "$name" == "Unknown" ]] ; then
 								name=$(echo "${info[1]}" | grep -oP '(?<=Name ).*' || echo "Unknown")
 							fi
@@ -1056,8 +1065,11 @@ device_hunter() {
 					$rssitxt_switch
 					printf "|%s| %s - %s%s | RSSI: %s\n" "${rssitxt}" "${mac}" "${name}" "${comp}" "${rssi}" >> "$REPORT_FILE"
 					if [[ "$scan_privacy" -eq 1 ]] ; then mac="${mac:0:2}:░░:░░:░░:░░:░░"; name="$priv_name_txt"; comp=""; fi
-					# edit name for length over pager screen
-					name="${name}${comp}"; length=${#name}; if [[ "$length" -gt 17 ]] ; then name="${name:0:15}.."; fi
+					name="${name}${comp}"
+					if [[ "$archCur" == "pager" ]] ; then
+						# edit name for length over pager screen
+						length=${#name}; if [[ "$length" -gt 17 ]] ; then name="${name:0:15}.."; fi
+					fi
 					LOG "|${rssitxt}| ${mac} - ${name}"
 					# LOG magenta "|__________| ░░:░░:░░:░░:░░:░░ - REALLY LONG LONG NAME"
 				done < <(
@@ -1142,7 +1154,7 @@ device_hunter() {
 			if [[ "$scan_infrepeat" -eq 1 ]] ; then check_cancel; if [[ "$cancel_app" -eq 1 ]]; then break; fi fi
 			
 			if [[ "$skip_ask_1st_scan" -eq 0 && "${#BT_RSSIS[@]}" -gt 0 && "$select_target_seen" -eq 0 && "$cancel_app" -eq 0 && "$scan_targeted" == "false" ]] ; then
-				killall evtest 2>/dev/null
+				if [[ "$archCur" == "pager" ]] ; then killall evtest 2>/dev/null; fi
 				LOG blue   "-------------------------------------------"
 				LOG "Check results and Press OK..."
 				WAIT_FOR_BUTTON_PRESS A
@@ -1152,18 +1164,24 @@ device_hunter() {
 				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 					cancel_app=1
 					select_target_go=1
+					trap cleanup SIGINT
 					break
 				else
 					resp=$(CONFIRMATION_DIALOG "Do you want to continue scanning?")
 					if [[ "$resp" != "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 						cancel_app=1
+						trap cleanup SIGINT
 						sleep 0.5
 						break
 					fi
 					if [[ "$scan_infrepeat" -eq 1 ]] ; then
 						start_evtest
 						LOG blue   "-------------------------------------------"
-						LOG magenta "Long Press or Tap OK to pause/stop..."
+						if [[ "$archCur" == "pager" ]] ; then
+							LOG magenta "Long Press or Tap OK to pause/stop..."
+						else
+							LOG magenta "Press CTRL+C / CANCEL to pause/stop..."
+						fi
 						LOG magenta "Cannot be paused/stopped while BT scanning"
 						LOG magenta "It may take a couple seconds to process..."
 						show_header_extra=1
@@ -1173,7 +1191,11 @@ device_hunter() {
 			fi
 			if [[ "$scan_infrepeat" -eq 1 ]] && (( scannumber % 20 == 0 )) && (( scannumber != 0 )); then
 				LOG blue   "-------------------------------------------"
-				LOG magenta "Long Press or Tap OK to pause/stop..."
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG magenta "Long Press or Tap OK to pause/stop..."
+				else
+					LOG magenta "Press CTRL+C / CANCEL to pause/stop..."
+				fi
 				LOG magenta "Cannot be paused/stopped while BT scanning"
 				LOG magenta "It may take a couple seconds to process..."
 				show_header_extra=1
@@ -1216,14 +1238,13 @@ device_hunter() {
 						break
 					fi
 				fi
-				# LOG blue   "----------------- Press OK to scan again..."
 				# LOG "scan_infrepeat: $scan_infrepeat"
 				# WAIT_FOR_BUTTON_PRESS A
-				LOG blue   "------------------------- Scanning again..."
 			else
-				LOG blue   "------------------------- Scanning again..."
 				sleep 0.25
 			fi
+			LOG blue   "------------------------- Scanning again..."
+			
 			# LOG blue "------------ xx signals found -------------"
 			# LOG blue "-------------------------------------------"
 			# LOG green "Press OK to scan again..."
@@ -1237,7 +1258,7 @@ device_hunter() {
 		
 		killall hcitool 2>/dev/null
 		killall btmon 2>/dev/null
-		killall evtest 2>/dev/null
+		if [[ "$archCur" == "pager" ]] ; then killall evtest 2>/dev/null; fi
 		rm "$KEYCKTMP_FILE" 2>/dev/null
 		
 		LOG cyan "================= Scan Results =================="
@@ -1387,11 +1408,12 @@ detect_bt_classic() {
 	sleep 1
 	# LOG red "hcitool"
 	# (timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan) &
-	(timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan --length=$DATA_SCAN_SECONDS) &
+	# (timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan --length=$DATA_SCAN_SECONDS) &
+	((timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan --length=$DATA_SCAN_SECONDS) &) > /dev/null 2>&1
 	# LOG red "sleep"
 	sleep ${DATA_SCAN_SECONDS}
 		
-	#finish scans
+	# finish scans
 	killall hcitool 2>/dev/null
 	killall btmon 2>/dev/null
 	
@@ -2746,18 +2768,20 @@ scan_detect_from_scanned() {
 			printf "%s - EVENT: Start Scanning scanned Targets\n" "$(date +"%Y-%m-%d_%H%M%S")" >> "$REPORT_DETECT_FILE"
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			printf "Scanning %s scanned Targets, please wait...\n" "${#BT_TARGETS[@]}" >> "$REPORT_DETECT_FILE"
-			if [[ "${#BT_TARGETS[@]}" -gt "$savedTargWarn" ]] ; then
-				LOG magenta "====================================== WARNING =="
-				LOG red     "Scanned ${text_target_UC}s count is greater than ${savedTargWarn}!"
-				LOG red     "Extra time needed to scan for ALL Detections!"
-				if [[ "$scan_custom" -eq 1 ]] ; then
-					LOG red     "Approx. 90s for 1500 ${text_target_LC}s"
-				else
-					LOG red     "Approx. 3 min for 1500 ${text_target_LC}s"
+			if [[ "$archCur" == "pager" ]] ; then
+				if [[ "${#BT_TARGETS[@]}" -gt "$savedTargWarn" ]] ; then
+					LOG magenta "====================================== WARNING =="
+					LOG red     "Scanned ${text_target_UC}s count is greater than ${savedTargWarn}!"
+					LOG red     "Extra time needed to scan for ALL Detections!"
+					if [[ "$scan_custom" -eq 1 ]] ; then
+						LOG red     "Approx. 90s for 1500 ${text_target_LC}s"
+					else
+						LOG red     "Approx. 3 min for 1500 ${text_target_LC}s"
+					fi
+					LOG magenta "====================================== WARNING =="
+					printf "WARNING: Scanned Targets count is greater than %s!\n" "${savedTargWarn}" >> "$REPORT_DETECT_FILE"
+					printf "Extra time needed to scan for ALL Detections!\n" >> "$REPORT_DETECT_FILE"
 				fi
-				LOG magenta "====================================== WARNING =="
-				printf "WARNING: Scanned Targets count is greater than %s!\n" "${savedTargWarn}" >> "$REPORT_DETECT_FILE"
-				printf "Extra time needed to scan for ALL Detections!\n" >> "$REPORT_DETECT_FILE"
 			fi
 			LOG " "
 			for mac in "${!BT_TARGETS[@]}"; do
@@ -2852,18 +2876,20 @@ scan_detect_from_scanned() {
 			printf "%s - EVENT: Start Scanning Saved Targets\n" "$(date +"%Y-%m-%d_%H%M%S")" >> "$REPORT_DETECT_FILE"
 			printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETECT_FILE"
 			printf "Scanning %s Saved Targets, please wait...\n" "${linecount}" >> "$REPORT_DETECT_FILE"
-			if [[ "$linecount" -gt "$savedTargWarn" ]] ; then
-				LOG magenta "====================================== WARNING =="
-				LOG red     "Saved ${text_target_UC}s count is greater than ${savedTargWarn}!"
-				LOG red     "Extra time needed to scan for ALL Detections!"
-				if [[ "$scan_custom" -eq 1 ]] ; then
-					LOG red     "Approx. 90s for 1500 ${text_target_LC}s"
-				else
-					LOG red     "Approx. 3 min for 1500 ${text_target_LC}s"
+			if [[ "$archCur" == "pager" ]] ; then
+				if [[ "$linecount" -gt "$savedTargWarn" ]] ; then
+					LOG magenta "====================================== WARNING =="
+					LOG red     "Saved ${text_target_UC}s count is greater than ${savedTargWarn}!"
+					LOG red     "Extra time needed to scan for ALL Detections!"
+					if [[ "$scan_custom" -eq 1 ]] ; then
+						LOG red     "Approx. 90s for 1500 ${text_target_LC}s"
+					else
+						LOG red     "Approx. 3 min for 1500 ${text_target_LC}s"
+					fi
+					LOG magenta "====================================== WARNING =="
+					printf "WARNING: Saved Targets count is greater than %s!\n" "${savedTargWarn}" >> "$REPORT_DETECT_FILE"
+					printf "Extra time needed to scan for ALL Detections!\n" >> "$REPORT_DETECT_FILE"
 				fi
-				LOG magenta "====================================== WARNING =="
-				printf "WARNING: Saved Targets count is greater than %s!\n" "${savedTargWarn}" >> "$REPORT_DETECT_FILE"
-				printf "Extra time needed to scan for ALL Detections!\n" >> "$REPORT_DETECT_FILE"
 			fi
 			LOG " "
 			while IFS=' ' read -r key name; do
@@ -3039,7 +3065,7 @@ detect_jammers() {
 	
 	# possible cleanup from last run
 	rm "$KEYCKTMP_FILE" 2>/dev/null
-	killall evtest 2>/dev/null
+	if [[ "$archCur" == "pager" ]] ; then killall evtest 2>/dev/null; fi
 	
 	# set on each total run
 	cancel_app=0
@@ -3054,6 +3080,7 @@ detect_jammers() {
 	local maxJams=5
 	local maxNoJams=25
 	local showruntimeNS=0
+	local nsCheck=3050000
 
 	local jams=0
 	local nojamcount=0
@@ -3095,9 +3122,9 @@ detect_jammers() {
 		
 		# confirm cancel is pressed
 		# if grep -Eq "\\(BTN_EAST\\), value 1" "$KEYCKTMP_FILE"; then
-		if grep -q "(BTN_EAST), value 1" "$KEYCKTMP_FILE"; then
+		if [[ -s "$KEYCKTMP_FILE" ]] && grep -q "(BTN_EAST), value 1" "$KEYCKTMP_FILE"; then
 			# LOG "found"
-			killall evtest 2>/dev/null
+			if [[ "$archCur" == "pager" ]] ; then killall evtest 2>/dev/null; fi
 			# empty file
 			:> "$KEYCKTMP_FILE"
 			cancel_app=1
@@ -3107,6 +3134,7 @@ detect_jammers() {
 			LOG "Stopping..."
 			LOG "Stopping..."
 			LOG blue "--------------------------------------------------"
+			trap cleanup SIGINT
 			sleep 0.5
 		else
 			# LOG "not found, empty file"
@@ -3224,7 +3252,7 @@ detect_jammers() {
 			hciconfig hci1 down 2>/dev/null
 			sleep 1.5
 			LOG "Please wait..."
-			service bluetoothd restart 2>/dev/null
+			service $servicebt_cur restart 2>/dev/null
 			sleep 2
 			# LOG "Trying to Bring up Adapters"
 		else
@@ -3254,7 +3282,7 @@ detect_jammers() {
 					LOG red "RESET FAILED! Trying to reset again."
 				fi
 				LOG "Trying to Stop Blueooth"
-				service bluetoothd stop 2>/dev/null
+				service $servicebt_cur stop 2>/dev/null
 				sleep 2
 				LOG "Trying to Remove Bluetooth"
 				rmmod btusb 2>/dev/null
@@ -3263,7 +3291,7 @@ detect_jammers() {
 				modprobe btusb 2>/dev/null
 				sleep 2
 				LOG "Trying to Start Blueooth"
-				service bluetoothd start 2>/dev/null
+				service $servicebt_cur start 2>/dev/null
 				sleep 2
 				LOG "Trying to Bring up Adapters"
 				if [[ "$adapter_base" == "hci1" ]] ; then
@@ -3399,7 +3427,7 @@ detect_jammers() {
 			if ! hciconfig hci1 >/dev/null 2>&1; then
 				resp=$(CONFIRMATION_DIALOG "USB Bluetooth / hci1 NOT FOUND!
 				
-				Are you sure you have a USB Bluetooth Adapter plugged in and want to continue having the system reset it?")
+Are you sure you have a USB Bluetooth Adapter plugged in and want to continue having the system reset it?")
 				if [[ "$resp" != "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 					cancelJamRun=1
 				fi
@@ -3424,6 +3452,10 @@ detect_jammers() {
 			else
 				pinged_device="$hci1_MAC"
 			fi
+			if [[ "$archCur" != "pager" ]] ; then
+				showruntimeNS=1
+				nsCheck=4650000
+			fi
 			
 			printf "════════════════════════════════════════════\n" >> "$REPORT_DETJAM_FILE"
 			printf "%s - EVENT: Start scan\n" $(date +"%Y-%m-%d_%H%M%S") >> "$REPORT_DETJAM_FILE"
@@ -3444,7 +3476,11 @@ detect_jammers() {
 			:> "$KEYCKTMP_FILE"
 			start_evtest
 			LOG blue "--------------------------------------------------"
-			LOG cyan "-------- Long Press or Tap OK to stop... ---------"
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG cyan "-------- Long Press or Tap OK to stop... ---------"
+			else
+				LOG cyan "------------ Press CANCEL to stop... -------------"
+			fi
 			LOG blue "--------------------------------------------------"
 			
 			# start detection loop
@@ -3456,7 +3492,11 @@ detect_jammers() {
 					if [[ "$jamConf" -eq 0 ]] ; then
 						LOG blue "--------------------------------------------------"
 					fi
-					LOG cyan "-------- Long Press or Tap OK to stop... ---------"
+					if [[ "$archCur" == "pager" ]] ; then
+						LOG cyan "-------- Long Press or Tap OK to stop... ---------"
+					else
+						LOG cyan "------------ Press CANCEL to stop... -------------"
+					fi
 					LOG cyan "------- It may take a second to process... -------"
 					if (( runnum % 12 != 0 )); then
 						LOG blue "--------------------------------------------------"
@@ -3480,7 +3520,7 @@ detect_jammers() {
 					totalruntime=$((totalruntime+runtime))
 					endms=$EPOCHREALTIME; endms=${endms/./}; runtimens=$((endms - startms))
 					# check runtime of result
-					if [[ "$runtimens" -gt 3050000 && "$runnum" -gt 1 ]] ; then
+					if [[ "$runtimens" -gt "$nsCheck" && "$runnum" -gt 1 ]] ; then
 						nojamstreak_hold="$nojamstreak"; jamLast_hold="$jamLast"
 						jams=$((jams+1))
 						jamLast=1
@@ -3673,7 +3713,7 @@ detect_jammers() {
 		
 			LOG "Cleaning up..."
 			rm "$KEYCKTMP_FILE" 2>/dev/null
-			killall evtest 2>/dev/null
+			if [[ "$archCur" == "pager" ]] ; then killall evtest 2>/dev/null; fi
 			
 			# return adapters to noscan
 			hciconfig hci0 up noscan 2>/dev/null
