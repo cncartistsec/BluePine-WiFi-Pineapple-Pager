@@ -6,12 +6,17 @@ Compiled on Clockwork Pi CM4.  Bluez latest version downloaded from: https://www
 
 # Commands
 mkdir -p ~/bluez-build && cd ~/bluez-build
+
 wget https://www.kernel.org/pub/linux/bluetooth/bluez-5.85.tar.xz
+
 tar -xJf bluez-5.85.tar.xz
+
 cd bluez-5.85
 
 sudo apt update
+
 sudo apt install build-essential libbluetooth-dev libdbus-1-dev check wget tar
+
 sudo apt install libglib2.0-dev libudev-dev libical-dev libreadline-dev libsystemd-dev
 
 ./configure --with-udevdir=/lib/udev --with-systemdsystemunitdir=/lib/systemd/system --with-systemduserunitdir=/usr/lib/systemd/user --enable-deprecated --enable-tools
