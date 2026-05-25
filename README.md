@@ -62,6 +62,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 # https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE - (CC Skimmer Data)
 # https://github.com/colonelpanichacks/flock-you - (Flock OUIs + Names)
 # StamenScan - Author: FusedStamen - https://github.com/FusedStamen/StamenScan - (MAC filter idea)
+# Smart Glasses Detector - Noezsolution - https://github.com/Noezsolution/pineapple-pager-glasses-detector - (Smart Glasses Names)
 # 
 # ============================================
 # Includes: 
@@ -73,7 +74,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 #  -- -- -- Filters allowed, remove MAC addresses from scan that match Multicast/Random/Locally Administered.
 #  -- -- -- Verbose logging / debugging available, GPS coordinate logging if GPS device enabled.
 #  -- Bluetooth Device Detection: 
-#  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / USB Kill / WiFi Pineapple BT Scanner.
+#  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / Smart Glasses / USB Kill / WiFi Pineapple BT Scanner.
 #  -- -- -- Scan the airwaves, save targets, or scan your already saved target list from Device Hunter scans.
 #  -- Bluetooth Jammer Detector & Locator: 
 #  -- -- -- Detects & Locates Bluetooth Jammers/Interference Devices within close range.
