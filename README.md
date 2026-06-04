@@ -47,7 +47,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 # Author: cncartist
 # Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.4
+# Version: 1.5
 # 
 # ============================================
 # Acknowledgements: 
@@ -62,7 +62,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 # https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE - (CC Skimmer Data)
 # https://github.com/colonelpanichacks/flock-you - (Flock OUIs + Names)
 # StamenScan - Author: FusedStamen - https://github.com/FusedStamen/StamenScan - (MAC filter idea)
-# Smart Glasses Detector - Noezsolution - https://github.com/Noezsolution/pineapple-pager-glasses-detector - (Smart Glasses Names)
+# Smart Glasses Detector - Author: Noezsolution - https://github.com/Noezsolution/pineapple-pager-glasses-detector - (Smart Glasses Names)
 # 
 # ============================================
 # Includes: 
@@ -74,7 +74,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 #  -- -- -- Filters allowed, remove MAC addresses from scan that match Multicast/Random/Locally Administered.
 #  -- -- -- Verbose logging / debugging available, GPS coordinate logging if GPS device enabled.
 #  -- Bluetooth Device Detection: 
-#  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / Smart Glasses / USB Kill / WiFi Pineapple BT Scanner.
+#  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / Nest Devices / Smart Glasses / Tiles / USB Kill / WiFi Pineapple BT Scanner.
 #  -- -- -- Scan the airwaves, save targets, or scan your already saved target list from Device Hunter scans.
 #  -- Bluetooth Jammer Detector & Locator: 
 #  -- -- -- Detects & Locates Bluetooth Jammers/Interference Devices within close range.
@@ -105,7 +105,8 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 #  -- -- -- Saved Target List can be named for archiving, alphanumerical characters only.
 #  -- Configuration saving / tracking number of scans and malicious items found over time:
 #  -- -- -- Configuration backed up to "savedconfig.json" on exit.
-#  -- -- -- If pager is updated/factory reset and config/history is wiped, configuration backup will restore settings.
+#  -- -- -- Configuration persists across pager firwmare updates.
+#  -- -- -- If pager is factory reset and payload config/history is wiped, backup will restore configuration if json file is intact.
 #  -- Privacy / Streamer Mode:
 #  -- -- -- (obscures MAC + Targets/Device Names) allows full functionality while obscuring ALL identifying information on screen, for both targets and self.
 #  -- Friendly Mode:
@@ -118,7 +119,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 #  -- Dependencies / Ringtones:
 #  -- -- -- evtest and GNU Grep are required dependencies, will install automatically if confirmed
 #  -- -- -- Will check for ringtones at start and copy if confirmed
-#  -- AArch64/ARM64/Debian Support
+#  -- AArch64/ARM64/Debian Support:
 #  -- -- -- Tested on ClockworkPi (Trixie) & Hackberry (Kali) and should work on other Raspberry Pi based systems.
 #  -- -- -- Support files are not included with the pager payload from the official repo, they can be found at: 
 #  -- -- -- https://github.com/cncartistsec/BluePine-WiFi-Pineapple-Pager/tree/main/bt-bluepine/include
@@ -157,6 +158,10 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 #  -- -- -- -- - Multi: ALL Locally Administered (x2, x6, xA, xE)
 #  -- -- -- -- - Multi: ALL Random (x3, x7, xB, xF)
 #  -- -- -- -- - WARNING: Filters REMOVE real devices from report/display and only applies to non-targeted scans!
+#  -- Bluetooth Device Detection: 
+#  -- -- -- Please be aware of false detections!
+#  -- -- -- Bluetooth MAC's + Names are customizable with certain consumer Bluetooth Adapters.
+#  -- -- -- Flock detection is limited and best performed with BT + WiFi combined, but some battery devices and other units can broadcast BT.
 #  -- Bluetooth Jammer Detector & Locator:
 #  -- -- -- "Jam" counter resets every 25 "nojams" to clean out errors, and the "Found" counter will only count true confirmed jams in the area.
 #  -- -- -- Confirmed jams are calculated at 5 jams per 25 scans.
@@ -185,6 +190,10 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 #  -- -- -- updated theme in /mmc/root/themes/THEME/components/templates
 #  -- -- -- -- - option_dialog_string.json  ( "max_chars": 38 )
 #  -- -- -- -- - option_dialog_string_selected.json  ( "max_chars": 40 )
+#  -- Data Migration for Persistent Configuration / Targets:
+#  -- -- -- If moving between devices after collecting data, three files need to be copied/migrated.
+#  -- -- -- "SavedTargets.txt" & "LastTarget.txt" can be copied between devices for persistent Targets.
+#  -- -- -- "savedconfig.json" can be copied between devices for persistent Configuration.
 # 
 # ============================================
 #       LOGGING STRUCTURE / DATA FILES
@@ -228,6 +237,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 # ============================================
 #            Version History
 # ============================================
+# v1.5 -- Add Nest, Smart Glasses, & Tile Detection
 # v1.4 -- AArch64/ARM64/Debian Support
 # v1.3 -- Filtering Options + Scantime Tracking
 # v1.2 -- GPS Updates + Bug Fixes
@@ -236,7 +246,6 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 # ============================================
 #          Future improvements
 # ============================================
-# build log viewer in?
 # change actual sound setting for system/alerts?
 # implement sql lite db instead of current method?
 # add node support for other data source?
