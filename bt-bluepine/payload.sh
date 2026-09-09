@@ -3,7 +3,7 @@
 # Author: cncartist
 # Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.5
+# Version: 1.6
 # 
 # ============================================
 # Acknowledgements: 
@@ -16,9 +16,10 @@
 # https://github.com/judcrandall/lookout.py - (Axon OUI)
 # Fuzz_Finder - Author: OSINTI4L - (Axon OUIs)
 # https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE - (CC Skimmer Data)
-# https://github.com/colonelpanichacks/flock-you - (Flock OUIs + Names)
+# Flock-You - https://github.com/colonelpanichacks/flock-you - (Flock OUIs + Names)
 # StamenScan - Author: FusedStamen - https://github.com/FusedStamen/StamenScan - (MAC filter idea)
 # Smart Glasses Detector - Author: Noezsolution - https://github.com/Noezsolution/pineapple-pager-glasses-detector - (Smart Glasses Names)
+# NyanBox - Author: jbohack - https://github.com/jbohack/nyanBOX/ (Meshtastic UUID)
 # 
 # ============================================
 # Includes: 
@@ -30,7 +31,7 @@
 #  -- -- -- Filters allowed, remove MAC addresses from scan that match Multicast/Random/Locally Administered.
 #  -- -- -- Verbose logging / debugging available, GPS coordinate logging if GPS device enabled.
 #  -- Bluetooth Device Detection: 
-#  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / Nest Devices / Smart Glasses / Tiles / USB Kill / WiFi Pineapple BT Scanner.
+#  -- -- -- Apple AirTag / Axon / CC Skimmer / Flipper / Flock / Meshtastic/MeshCore / Nest Devices / Smart Glasses / Tiles / USB Kill / WiFi Pineapple BT Scanner.
 #  -- -- -- Scan the airwaves, save targets, or scan your already saved target list from Device Hunter scans.
 #  -- Bluetooth Jammer Detector & Locator: 
 #  -- -- -- Detects & Locates Bluetooth Jammers/Interference Devices within close range.
@@ -82,6 +83,11 @@
 #  -- -- -- Required files in "include/aarch64" folder, desktop shortcut/icon included.
 #  -- -- -- Included to convert DuckyScript commands utilized for usage on generic Debian/Bash terminals.
 #  -- -- -- Loot/Reports are stored relative to the script directory, in the 'loot' folder.
+#  -- Node Support / Pine Needles:
+#  -- -- -- Nodes provide extra support data for Bluetooth scans.
+#  -- -- -- Nodes widen Bluetooth coverage, reveal more devices per scan, and accurately detect AirTags and Meshtastic/MeshCore.
+#  -- -- -- Nodes currently tested running on XIAO_ESP32-C5's.
+#  -- -- -- Firmware can be found at: https://github.com/cncartistsec/BluePine-WiFi-Pineapple-Pager/tree/main/node-firmware/
 # 
 # ============================================
 # Notes:
@@ -106,13 +112,14 @@
 #  -- -- -- There are many factors in Bluetooth sensitivity; walls & windows bounce or weaken signal, desks/objects can weaken signal, orientation of the pager can matter, and signals can look weak until you get closer to the actual source/Bluetooth chip on the target device. 
 #  -- -- -- Using an external USB CSR8510 / CSR v4.0 Bluetooth Adapter, you can achieve better sensitivity and range.
 #  -- -- -- Filters: 
-#  -- -- -- -- - Filters act on the first Octet of a MAC (12:), or the MAC OUI/first 6 digits (12:34:56)
+#  -- -- -- -- - Filters act on the first Octet of a MAC (12:), the MAC OUI/first 6 digits (12:34:56), or removal of specific devices.
 #  -- -- -- -- - Adding Filters allows faster processing, removes Targets from results, and helps if you know which MACs you are searching for.
 #  -- -- -- -- - OUI: Empty OUI (00:00:00)
 #  -- -- -- -- - Basic: Multicast (Group) 01 & Locally Administered (Unicast) 02
 #  -- -- -- -- - Multi: ALL Multicast (01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF)
 #  -- -- -- -- - Multi: ALL Locally Administered (x2, x6, xA, xE)
 #  -- -- -- -- - Multi: ALL Random (x3, x7, xB, xF)
+#  -- -- -- -- - AirTag: Removes ALL AirTags found with Nodes (the most common device found when scanning with Nodes)
 #  -- -- -- -- - WARNING: Filters REMOVE real devices from report/display and only applies to non-targeted scans!
 #  -- Bluetooth Device Detection: 
 #  -- -- -- Please be aware of false detections!
@@ -150,6 +157,22 @@
 #  -- -- -- If moving between devices after collecting data, three files need to be copied/migrated.
 #  -- -- -- "SavedTargets.txt" & "LastTarget.txt" can be copied between devices for persistent Targets.
 #  -- -- -- "savedconfig.json" can be copied between devices for persistent Configuration.
+#  -- Node Support / Pine Needles:
+#  -- -- -- Nodes running on XIAO_ESP32-C5's
+#  -- -- -- -- - Nodes connect to the Pager Mgmt AP for Pager, Hotspot for Debian/AArch64
+#  -- -- -- Pager Mgmt AP + Hotspot for Debian can be enabled at: "Preferences > Manage Pine Needles"
+#  -- -- -- -- - Hotspot Interface (wlan0, wlan1, etc) can be selected at: "Preferences > Manage Pine Needles > Select Hotspot Interface"
+#  -- -- -- Node Network is setup at: "Preferences > Manage Pine Needles"
+#  -- -- -- To configure each Node:
+#  -- -- -- -- - 1. Power on and flash Node Firmware via esptool, flash download tool, or similar flashing utility.
+#  -- -- -- -- -- -- - You may have to hold boot button while connecting USB-C power and release after to enable boot/flashing mode.
+#  -- -- -- -- -- -- - Flash Params: SPI SPEED: 40MHz (or 80MHz), SPI MODE: DIO, DoNotChgBin: Checked, BAUD: 921600 (or 460800)
+#  -- -- -- -- - 2. Connect to AP "PineNeedle-Cfg", PW "MyNeedleNetwork", and go to "http://192.168.4.1" to configure the Node.
+#  -- -- -- -- -- -- - Make sure to configure one Node at a time.
+#  -- -- -- -- -- -- - They all use the same default AP Name and after configuration the credentials will be saved to the Node.
+#  -- -- -- -- - 3. Save and Node will reboot and try to connect to Node Network Configured.
+#  -- -- -- -- -- -- - If credentials fail after 45 seconds, Node will reboot into AP/Configuration mode again.
+#  -- -- -- -- -- -- - When powered on Nodes try to connect for 45 seconds and if connection fails, the Node enters AP/Configuration mode again.
 # 
 # ============================================
 #       LOGGING STRUCTURE / DATA FILES
@@ -159,6 +182,7 @@
 # Probe Reports & Logs: "/root/loot/csec/bt-bluepine/probe"
 # Scan Reports & Logs: "/root/loot/csec/bt-bluepine/scan"
 # Targets Data: "/root/loot/csec/bt-bluepine/targets"
+# Node Data: "/root/loot/csec/bt-bluepine/nodes"
 # 
 # Saved Targets File: "/root/loot/csec/bt-bluepine/targets/SavedTargets.txt"
 # Last Target File (MAC only): "/root/loot/csec/bt-bluepine/targets/LastTarget.txt"
@@ -193,6 +217,7 @@
 # ============================================
 #            Version History
 # ============================================
+# v1.6 -- GPS Management, Node Support, AirTag Detection, Fixes
 # v1.5 -- Add Nest, Smart Glasses, & Tile Detection
 # v1.4 -- AArch64/ARM64/Debian Support
 # v1.3 -- Filtering Options + Scantime Tracking
@@ -202,10 +227,8 @@
 # ============================================
 #          Future improvements
 # ============================================
-# change actual sound setting for system/alerts?
+# change actual sound setting for pager alerts?
 # implement sql lite db instead of current method?
-# add node support for other data source?
-# add more detections/detection based on UUID?
 # ============================================
 # 
 
@@ -243,6 +266,11 @@ else
 	fi
 	LOOT_DIR="./loot"
 	servicebt_cur="bluetooth"
+	PYTHONVENV_FILE="${LOOT_DIR}/config/.venv"
+	# gps defaults
+	gps_selport="/dev/ttyAMA0"
+	gps_selbaud=9600
+	gps_scriptloc="./include/aarch64/gps_stream.py"
 	source "./include/aarch64/funcs_duck.sh" # load funcs
 fi
 
@@ -253,7 +281,7 @@ source "./include/funcs_scan.sh"
 # source "./include/funcs_extl.sh"
 
 # ---- CONFIG ----
-LOOT_SCAN="${LOOT_DIR}/scan"; LOOT_DETECT="${LOOT_DIR}/detect"; LOOT_PROBE="${LOOT_DIR}/probe"; LOOT_TARGETS="${LOOT_DIR}/targets"; LOOT_CONFIG="${LOOT_DIR}/config"
+LOOT_SCAN="${LOOT_DIR}/scan"; LOOT_DETECT="${LOOT_DIR}/detect"; LOOT_PROBE="${LOOT_DIR}/probe"; LOOT_TARGETS="${LOOT_DIR}/targets"; LOOT_CONFIG="${LOOT_DIR}/config"; LOOT_NODES="${LOOT_DIR}/nodes"
 mkdir -p "$LOOT_DIR"; mkdir -p "$LOOT_SCAN"; mkdir -p "$LOOT_DETECT"; mkdir -p "$LOOT_PROBE"; mkdir -p "$LOOT_TARGETS"; mkdir -p "$LOOT_CONFIG"
 TIMESTAMP=$(date +"%Y-%m-%d_%H%M%S")
 REPORT_FILE="$LOOT_SCAN/Report_${TIMESTAMP}.txt"
@@ -268,11 +296,15 @@ DATASTREAMBTLETMP_FILE="$LOOT_DETECT/DataBTLETMP_${TIMESTAMP}.txt"
 SAVEDTARGETS_FILE="$LOOT_TARGETS/SavedTargets.txt"
 TARGETMAC_FILE="$LOOT_CONFIG/LastTarget.txt"
 SAVEDCONFIG_FILE="$LOOT_CONFIG/savedconfig.json"
-KEYCKTMP_FILE="$LOOT_DIR/KeyCKTMP.txt"
+KEYCKTMP_FILE="/tmp/KeyCKTMP.XXXXXX"
+ADDRREM_FILE="/tmp/AddrRemTMP.XXXXXX"
 if [[ "$archCur" != "pager" ]] ; then
 	# need to be in root group to delete loot files from FTP on other arch
 	# RUN THIS to add to root group -> usermod -aG root <yourusername>
 	chmod -R 775 "$LOOT_DIR" # auto set loot dir to allow ftp edits if user in root group
+	# sudo chown -R admin:admin "$LOOT_NODES"
+	# add execute to gps_stream
+	chmod +x ./include/aarch64/gps_stream.py 2>/dev/null
 fi
 
 # ---- DEFAULTS ----
@@ -288,7 +320,7 @@ cancel_press=0
 cancel_app=0
 selnum=0
 select_target_go=0
-silent_backup=0
+silent_action=0
 detections=0
 lootreports=0
 hold_scan_btle=""
@@ -300,6 +332,7 @@ priv_mac_save=""
 priv_name_txt="-+ Name Hidden +-"
 priv_mac_num="12:34:56:78:90:AB"
 priv_mac_txt="░░:░░:░░:░░:░░:░░"
+scan_BT_APLAIRTG="false"
 scan_BT_AXONCAMS="false"
 scan_BT_CCSKIMMR="false"
 scan_BT_FLIPPERS="false"
@@ -310,7 +343,6 @@ scan_BT_SMRTGLAS="false"
 scan_BT_TILETAGS="false"
 scan_BT_USBKILLS="false"
 scan_BT_PINEAPPS="false"
-# scan_BT_APLAIRTG="false"
 savedTargWarn=1000
 savedTargCrit=3000
 gpspos_last=""
@@ -318,7 +350,13 @@ text_hunt_UC="Find"
 text_hunt_LC="find"
 text_target_UC="Device"
 text_target_LC="device"
+# Default Node Settings
+nodes_netw_pgr="172.16.52.1"
+nodes_port=65432
+nodes_verified=0
+lootnodes=0
 # ---- DEFAULTS ----
+
 # ---- DEFAULTS SAVED CFG ----
 total_scans=0
 total_detected=0
@@ -341,6 +379,19 @@ filter_randomall=0
 filter_localall=0
 filter_multiall=0
 filter_emptyoui=0
+filter_airtag=0
+nodes_enabled=0
+hotspot_enabled=0
+previousWiFi=""
+# Node Network SSID needs to be compliant
+# No Spaces or Special Characters: Local DNS router stacks follow the standard internet host conventions. 
+# Use only alphanumeric characters and hyphens (-). Avoid spaces, underscores (_), or punctuation symbols.
+nodes_ssid="NeedleNetwork"
+nodes_pw="MyNeedleNetwork65432"
+# Node Network needs to end in ".1" to broadcast properly
+nodes_netw="10.42.0.1"
+nodes_iface="wlan0"
+scan_btiface="hci0"
 # number in seconds
 DATA_SCAN_SECONDS=7
 # ---- DEFAULTS SAVED CFG ----
@@ -352,6 +403,7 @@ declare -A BT_COMPS
 declare -A BT_TARGETS
 declare -A BT_TARGETS_SORT
 declare -A BT_TARGETS_SAVED
+declare -A BT_APLAIRTG
 declare -A BT_AXONCAMS
 declare -A BT_CCSKIMMR
 declare -A BT_FLIPPERS
@@ -363,12 +415,8 @@ declare -A BT_SMRTGLAS
 declare -A BT_USBKILLS
 declare -A BT_PINEAPPS
 declare -A BT_CUSTOMOU
-# declare -A BT_APLAIRTG
-# ---- ARRAYS ----
-
 # ---- BLE ----
 BLE_IFACE="hci0"
-
 # ---- REGEX ----
 VALID_MAC="([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}"
 
@@ -381,13 +429,22 @@ cleanup() {
 		btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
 		echo 1 > "$btn_a_path" 2>/dev/null
 		echo 1 > "$btn_b_path" 2>/dev/null
+		rm "$KEYCKTMP_FILE" 2>/dev/null
+		rm "$ADDRREM_FILE" 2>/dev/null
+	else
+		# stop gps collection for other arch
+		if [[ "$gps_enabled" -eq 1 ]] ; then gps_collect_stop; fi
+		sudo rm -f "$KEYCKTMP_FILE" 2>/dev/null
+		sudo rm -f "$ADDRREM_FILE" 2>/dev/null
+	fi
+	if [[ "$nodes_verified" -eq 1 || "$nodes_enabled" -eq 1 ]]; then
+		killall socat 2>/dev/null
 	fi
 	rm "$DATASTREAMBT_FILE" 2>/dev/null
 	rm "$DATASTREAMBT2_FILE" 2>/dev/null
 	rm "$DATASTREAMBT3_FILE" 2>/dev/null
 	rm "$DATASTREAMBTTMP_FILE" 2>/dev/null
-	rm "$KEYCKTMP_FILE" 2>/dev/null
-	silent_backup=1
+	silent_action=1
 	config_backup
     exit 0
 }
@@ -439,6 +496,17 @@ filter_randomall=$(PAYLOAD_GET_CONFIG bluepinesuite filter_randomall)
 filter_localall=$(PAYLOAD_GET_CONFIG bluepinesuite filter_localall)
 filter_multiall=$(PAYLOAD_GET_CONFIG bluepinesuite filter_multiall)
 filter_emptyoui=$(PAYLOAD_GET_CONFIG bluepinesuite filter_emptyoui)
+filter_airtag=$(PAYLOAD_GET_CONFIG bluepinesuite filter_airtag)
+nodes_enabled=$(PAYLOAD_GET_CONFIG bluepinesuite nodes_enabled)
+hotspot_enabled=$(PAYLOAD_GET_CONFIG bluepinesuite hotspot_enabled)
+previousWiFi=$(PAYLOAD_GET_CONFIG bluepinesuite previousWiFi)
+nodes_ssid=$(PAYLOAD_GET_CONFIG bluepinesuite nodes_ssid)
+nodes_pw=$(PAYLOAD_GET_CONFIG bluepinesuite nodes_pw)
+nodes_iface=$(PAYLOAD_GET_CONFIG bluepinesuite nodes_iface)
+nodes_netw=$(PAYLOAD_GET_CONFIG bluepinesuite nodes_netw)
+scan_btiface=$(PAYLOAD_GET_CONFIG bluepinesuite scan_btiface)
+gps_selport=$(PAYLOAD_GET_CONFIG bluepinesuite gps_selport)
+gps_selbaud=$(PAYLOAD_GET_CONFIG bluepinesuite gps_selbaud)
 
 [[ -z "$DATA_SCAN_SECONDS" ]] && DATA_SCAN_SECONDS=7
 [[ -z "$scan_btle" ]] && scan_btle="true"
@@ -462,6 +530,17 @@ filter_emptyoui=$(PAYLOAD_GET_CONFIG bluepinesuite filter_emptyoui)
 [[ -z "$filter_localall" ]] && filter_localall=0
 [[ -z "$filter_multiall" ]] && filter_multiall=0
 [[ -z "$filter_emptyoui" ]] && filter_emptyoui=0
+[[ -z "$filter_airtag" ]] && filter_airtag=0
+[[ -z "$nodes_enabled" ]] && nodes_enabled=0
+[[ -z "$hotspot_enabled" ]] && hotspot_enabled=0
+[[ -z "$previousWiFi" ]] && previousWiFi=""
+[[ -z "$nodes_ssid" ]] && nodes_ssid="NeedleNetwork"
+[[ -z "$nodes_pw" ]] && nodes_pw="MyNeedleNetwork65432"
+[[ -z "$nodes_iface" ]] && nodes_iface="wlan0"
+[[ -z "$nodes_netw" ]] && nodes_netw="10.42.0.1"
+[[ -z "$scan_btiface" ]] && scan_btiface="hci0"
+[[ -z "$gps_selport" ]] && gps_selport="/dev/ttyAMA0"
+[[ -z "$gps_selbaud" ]] && gps_selbaud=9600
 
 # check dependencies + ringtones
 check_dependencies
@@ -474,8 +553,10 @@ settings_check
 # kill evtest if still running and rm old key file
 if [[ "$archCur" == "pager" ]] ; then
 	(killall evtest 2>/dev/null) &
+	rm "$KEYCKTMP_FILE" 2>/dev/null
+else
+	sudo rm -f "$KEYCKTMP_FILE" 2>/dev/null
 fi
-rm "$KEYCKTMP_FILE" 2>/dev/null
 
 # check if file is not empty this time around
 if [[ -s "$TARGETMAC_FILE" ]]; then
@@ -486,8 +567,11 @@ if [[ -s "$TARGETMAC_FILE" ]]; then
 fi
 
 # warn of global settings enabled
-if [[ "$scan_friendly" -eq 1 ]] || [[ "$scan_privacy" -eq 1 ]] || [[ "$scan_stealth" -eq 1 ]] ; then
+if [[ "$scan_friendly" -eq 1 || "$scan_privacy" -eq 1 || "$scan_stealth" -eq 1 || "$nodes_enabled" -eq 1 ]] ; then
 	LOG blue "================================================="
+	if [[ "$nodes_enabled" -eq 1 ]] ; then
+		LOG blue "==== ^|^ == Pine Needle(s) Enabled... == ^|^ ===="
+	fi
 	if [[ "$scan_stealth" -eq 1 ]] ; then
 		LOG blue "============ Stealth Mode Enabled... ============"
 	fi
@@ -502,9 +586,15 @@ if [[ "$scan_friendly" -eq 1 ]] || [[ "$scan_privacy" -eq 1 ]] || [[ "$scan_stea
 fi
 
 # reset gpsd in background
-(reset_gpsd) &
+if [[ "$archCur" == "pager" ]] ; then
+	(reset_gpsd) &
+else
+	reset_gpsd
+fi
 # verify bluetoothd running at start
 bluetoothd_check
+# check hardware block on bluetooth
+if [[ "$archCur" != "pager" ]] ; then check_rfkill "start"; fi
 # run saved targets check/load
 saved_targets_check
 
@@ -525,6 +615,37 @@ sleep 0.5
 # External Bluetooth Adapter?
 external_bt_check
 
+# Node Verification
+if [[ "$archCur" == "pager" && "$nodes_enabled" -eq 1 ]]; then
+	cur_wlan0mgmt=$(uci get wireless.wlan0mgmt.disabled)
+	if [[ "$cur_wlan0mgmt" -eq 0 ]]; then
+		node_verify
+	else
+		resp=$(CONFIRMATION_DIALOG "Enable Pager MGMT AP for Pine Needle(s) Connection?")
+		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+			LOG "Enabling Pager MGMT AP..."
+			silent_action=1
+			node_wifimgmtap
+			silent_action=0
+			LOG green "Pager MGMT AP Enabled!"
+			node_verify
+		fi
+	fi
+	unset cur_wlan0mgmt
+elif [[ "$archCur" != "pager" && "$nodes_enabled" -eq 1 && "$hotspot_enabled" -eq 1 ]]; then
+	# disable and re-enable hotspot for safety?
+	resp=$(CONFIRMATION_DIALOG "Enable Hotspot on ${nodes_iface} for Pine Needle(s) Connection?")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		LOG "Enabling Hotspot..."
+		silent_action=1
+		node_start_hotspot
+		silent_action=0
+		LOG green "Hotspot Enabled!"
+	fi
+	node_verify
+fi
+
+
 while true; do
 	scan_custom=0
 	main_menu
@@ -535,6 +656,7 @@ while true; do
 		device_hunter
 	elif [[ "$main_option" -eq 2 ]]; then
 		while true; do
+			scan_BT_APLAIRTG="false"
 			scan_BT_AXONCAMS="false"
 			scan_BT_CCSKIMMR="false"
 			scan_BT_FLIPPERS="false"
@@ -555,6 +677,9 @@ while true; do
 				break
 			elif [[ "$submenu_option" -eq 1 ]]; then
 				LOG "Running All Detections...."
+				if [[ "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+					scan_BT_APLAIRTG="true"
+				fi
 				scan_BT_AXONCAMS="true"
 				scan_BT_CCSKIMMR="true"
 				scan_BT_FLIPPERS="true"
@@ -568,6 +693,7 @@ while true; do
 				scan_detection
 			elif [[ "$submenu_option" -eq 2 ]]; then
 				LOG "Running Detect ALL - Scanned/Saved ${text_target_UC}s...."
+				scan_BT_APLAIRTG="true"
 				scan_BT_AXONCAMS="true"
 				scan_BT_CCSKIMMR="true"
 				scan_BT_FLIPPERS="true"
@@ -592,42 +718,50 @@ while true; do
 					LOG " "
 				fi
 			elif [[ "$submenu_option" -eq 4 ]]; then
+				if [[ "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+					LOG "Running Apple AirTag Detection...."
+					scan_BT_APLAIRTG="true"
+					scan_detection
+				else
+					LOG red "Node(s) Required for AirTag Detection!"
+				fi
+			elif [[ "$submenu_option" -eq 5 ]]; then
 				LOG "Running Axon Detection...."
 				scan_BT_AXONCAMS="true"
 				scan_detection
-			elif [[ "$submenu_option" -eq 5 ]]; then
+			elif [[ "$submenu_option" -eq 6 ]]; then
 				LOG "Running CC Skimmer Detection...."
 				scan_BT_CCSKIMMR="true"
 				scan_detection
-			elif [[ "$submenu_option" -eq 6 ]]; then
+			elif [[ "$submenu_option" -eq 7 ]]; then
 				LOG "Running Flipper Detection...."
 				scan_BT_FLIPPERS="true"
 				scan_detection
-			elif [[ "$submenu_option" -eq 7 ]]; then
+			elif [[ "$submenu_option" -eq 8 ]]; then
 				LOG "Running Flock Detection...."
 				scan_BT_FLOCKCAM="true"
 				scan_detection
-			elif [[ "$submenu_option" -eq 8 ]]; then
-				LOG "Running Meshtastic Detection...."
+			elif [[ "$submenu_option" -eq 9 ]]; then
+				LOG "Running Meshtastic / MeshCore Detection...."
 				scan_BT_MESHTAST="true"
 				scan_detection
-			elif [[ "$submenu_option" -eq 9 ]]; then
+			elif [[ "$submenu_option" -eq 10 ]]; then
 				LOG "Running Nest Detection...."
 				scan_BT_NESTCAMS="true"
 				scan_detection
-			elif [[ "$submenu_option" -eq 10 ]]; then
+			elif [[ "$submenu_option" -eq 11 ]]; then
 				LOG "Running Smart Glasses Detection...."
 				scan_BT_SMRTGLAS="true"
 				scan_detection
-			elif [[ "$submenu_option" -eq 11 ]]; then
+			elif [[ "$submenu_option" -eq 12 ]]; then
 				LOG "Running Tile Detection...."
 				scan_BT_TILETAGS="true"
 				scan_detection
-			elif [[ "$submenu_option" -eq 12 ]]; then
+			elif [[ "$submenu_option" -eq 13 ]]; then
 				LOG "Running USB Kill Detection...."
 				scan_BT_USBKILLS="true"
 				scan_detection
-			elif [[ "$submenu_option" -eq 13 ]]; then
+			elif [[ "$submenu_option" -eq 14 ]]; then
 				LOG "Running WiFi Pineapple Detection...."
 				scan_BT_PINEAPPS="true"
 				scan_detection
@@ -782,6 +916,8 @@ while true; do
 							else 
 								LOG "Change Name skipped for hci0..."
 							fi
+						else
+							sleep 0.5
 						fi
 						if hciconfig | grep -q hci1; then
 							resp=$(CONFIRMATION_DIALOG "Modify hci1 Bluetooth Name?")
@@ -789,6 +925,16 @@ while true; do
 								update_bluetooth_name "hci1"
 							else 
 								LOG "Change Name skipped for hci1..."
+							fi
+						else
+							sleep 0.5
+						fi
+						if [[ "$scan_btiface" != "hci0" && "$scan_btiface" != "hci1" ]] && hciconfig | grep -q $scan_btiface; then
+							resp=$(CONFIRMATION_DIALOG "Modify ${scan_btiface} Bluetooth Name?")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								update_bluetooth_name "$scan_btiface"
+							else 
+								LOG "Change Name skipped for ${scan_btiface}..."
 							fi
 						fi
 					elif [[ "$submenu_option" -eq 2 ]]; then
@@ -802,12 +948,24 @@ while true; do
 								update_bluetooth_mac "hci1"
 							else
 								LOG red "Bluetooth MAC cannot be changed for hci0!"
+								if [[ "$scan_btiface" != "hci0" && "$scan_btiface" != "hci1" ]] && hciconfig | grep -q $scan_btiface; then
+									if [[ "$enable_CSR_func" -eq 0 ]]; then
+										LOG red "WARNING: USB CSR BT not detected!"
+										LOG red "WARNING: Changing MAC on USB BT may not work!"
+									fi
+									update_bluetooth_mac "$scan_btiface"
+								fi
 							fi
 						else
 							LOG red "WARNING: Changing MAC may not work if hardware does not support it!"
 							update_bluetooth_mac "hci0"
 							if hciconfig | grep -q hci1; then
 								update_bluetooth_mac "hci1"
+							else
+								sleep 0.5
+							fi
+							if [[ "$scan_btiface" != "hci0" && "$scan_btiface" != "hci1" ]] && hciconfig | grep -q $scan_btiface; then
+								update_bluetooth_mac "$scan_btiface"
 							fi
 						fi
 					elif [[ "$submenu_option" -eq 3 ]]; then
@@ -819,6 +977,8 @@ while true; do
 							else 
 								LOG "Change Status/Discovery Setting skipped for hci0..."
 							fi
+						else
+							sleep 0.5
 						fi
 						if hciconfig | grep -q hci1; then
 							resp=$(CONFIRMATION_DIALOG "Modify hci1 Status/Discovery Setting?")
@@ -827,174 +987,116 @@ while true; do
 							else 
 								LOG "Change Status/Discovery Setting skipped for hci1..."
 							fi
+						else
+							sleep 0.5
+						fi
+						if [[ "$scan_btiface" != "hci0" && "$scan_btiface" != "hci1" ]] && hciconfig | grep -q $scan_btiface; then
+							resp=$(CONFIRMATION_DIALOG "Modify ${scan_btiface} Status/Discovery Setting?")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								update_bluetooth_status "$scan_btiface"
+							else 
+								LOG "Change Status/Discovery Setting skipped for ${scan_btiface}..."
+							fi
 						fi
 					elif [[ "$submenu_option" -eq 4 ]]; then
 						LOG "Retest USB Bluetooth for CSR...."
 						external_bt_check
+					elif [[ "$submenu_option" -eq 5 ]]; then
+						LOG "Select Bluetooth Interface...."
+						update_bluetooth_int
 					fi
 				done
 				submenu_option=0
 			elif [[ "$submenu_option" -eq 3 ]]; then
+				# manage gps
+				while true; do
+					LOG "Manage GPS...."
+					sub_sub_menu_managegps
+					submenu_option="$selnum"
+					if [[ "$submenu_option" -eq 0 ]]; then
+						LOG "Back to Preferences...."
+						break
+					elif [[ "$submenu_option" -eq 1 ]]; then
+						LOG "GPS Info...."
+						gps_info
+					elif [[ "$submenu_option" -eq 2 ]]; then
+						LOG "Verify GPS...."
+						gps_verify
+					elif [[ "$submenu_option" -eq 3 ]]; then
+						LOG "Select GPS Device...."
+						gps_deviceselect
+					elif [[ "$submenu_option" -eq 4 ]]; then
+						LOG "Select GPS Baud...."
+						gps_baudselect
+					fi
+				done
+				submenu_option=0
+			elif [[ "$submenu_option" -eq 4 ]]; then
+				# node_config
+				while true; do
+					LOG "Manage Pine Needles...."
+					sub_sub_menu_nodecfg
+					submenu_option="$selnum"
+					if [[ "$submenu_option" -eq 0 ]]; then
+						LOG "Back to Preferences...."
+						break
+					elif [[ "$submenu_option" -eq 1 ]]; then
+						if [[ "$nodes_enabled" -eq 1 ]] ; then
+							LOG "Disable Pine Needle(s)...."
+							node_config
+						else
+							LOG "Enable Node(s)/Pine Needle(s)...."
+							node_config
+						fi
+					elif [[ "$submenu_option" -eq 2 ]]; then
+						if [[ "$nodes_enabled" -eq 1 ]] ; then
+							LOG "Verify Pine Needle(s)...."
+							node_verify
+						else
+							LOG red "Pine Needle(s) Not Enabled Yet...."
+						fi
+					elif [[ "$submenu_option" -eq 3 ]]; then
+						if [[ "$archCur" == "pager" ]] ; then
+							LOG "Enable/Disable WiFi Mgmt AP...."
+							node_wifimgmtap
+						else
+							if [[ "$hotspot_enabled" -eq 1 ]] ; then
+								LOG "Disable Hotspot...."
+								node_stop_hotspot
+							else
+								LOG "Enable Hotspot...."
+								node_start_hotspot
+							fi
+						fi
+					elif [[ "$submenu_option" -eq 4 ]]; then
+						LOG "Modify Hotspot SSID...."
+						node_modifyhs_ssid
+					elif [[ "$submenu_option" -eq 5 ]]; then
+						LOG "Modify Hotspot Password...."
+						node_modifyhs_pw
+					elif [[ "$submenu_option" -eq 6 ]]; then
+						LOG "Select Hotspot Interface...."
+						node_modifyhs_int
+					elif [[ "$submenu_option" -eq 7 ]]; then
+						LOG "Modify Hotspot Network...."
+						node_modifyhs_netw
+					fi
+				done
+				submenu_option=0
+			elif [[ "$submenu_option" -eq 5 ]]; then
 				LOG "Sound...."
 				mute_config
-			elif [[ "$submenu_option" -eq 4 ]]; then
+			elif [[ "$submenu_option" -eq 6 ]]; then
 				LOG "Debug Mode...."
 				debug_config
-			elif [[ "$submenu_option" -eq 5 ]]; then
+			elif [[ "$submenu_option" -eq 7 ]]; then
 				LOG "Stealth Mode / Disable LEDS...."
 				stealth_config
-			elif [[ "$submenu_option" -eq 6 ]]; then
+			elif [[ "$submenu_option" -eq 8 ]]; then
 				LOG "Device ${text_hunt_UC}er Scan Filter Config...."
 				filter_config
 				LOG " "
-			elif [[ "$submenu_option" -eq 7 ]]; then
-				LOG "Clear History / Data / Settings...."
-				resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL History / Scan Counts? ")
-				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-					sleep 1
-					resp=$(CONFIRMATION_DIALOG "CONFIRM CLEAR ALL History / Scan Counts? - THIS ACTION CANNOT BE REVERSED!")
-					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-						PAYLOAD_DEL_CONFIG bluepinesuite total_scans
-						PAYLOAD_DEL_CONFIG bluepinesuite total_detected
-						PAYLOAD_DEL_CONFIG bluepinesuite total_scan_min
-						total_scans=0; total_detected=0; total_scan_min=0
-						LOG green "Total Scans + Detected cleared!"				
-						LOG "Press OK to continue..."
-						LOG " "
-						WAIT_FOR_BUTTON_PRESS A
-						sleep 0.25
-					fi
-				fi
-				resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL ${text_target_UC}s / Saved ${text_target_UC}s? ")
-				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-					sleep 1
-					resp=$(CONFIRMATION_DIALOG "CONFIRM CLEAR ALL ${text_target_UC}s / Saved ${text_target_UC}s? - THIS ACTION CANNOT BE REVERSED!")
-					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-						BT_RSSIS=()
-						BT_NAMES=()
-						BT_COMPS=()
-						BT_TARGETS=()
-						BT_AXONCAMS=()
-						BT_CCSKIMMR=()
-						BT_FLIPPERS=()
-						BT_FLOCKCAM=()
-						BT_MESHTAST=()
-						BT_NESTCAMS=()
-						BT_SMRTGLAS=()
-						BT_TILETAGS=()
-						BT_USBKILLS=()
-						BT_PINEAPPS=()
-						BT_CUSTOMOU=()
-						LOG "ALL Scan ${text_target_UC}s cleared!"
-						rm "$SAVEDTARGETS_FILE" 2>/dev/null
-						saved_targets_check
-						LOG "ALL Saved ${text_target_UC}s cleared!"
-						target_mac=""
-						echo "$target_mac" > "$TARGETMAC_FILE"
-						LOG "${text_target_UC} MAC cleared!"
-						LOG green "All ${text_target_UC}s / Saved ${text_target_UC}s cleared..."
-						LOG "Press OK to continue..."
-						LOG " "
-						WAIT_FOR_BUTTON_PRESS A
-						sleep 0.25
-					fi
-				fi
-				resp=$(CONFIRMATION_DIALOG "Do you want to Reset Configuration to Default? ")
-				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-					sleep 1
-					resp=$(CONFIRMATION_DIALOG "CONFIRM Reset Configuration to Default? - THIS ACTION CANNOT BE REVERSED!")
-					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-						LOG "Resetting configuration..."
-						# defaults from above
-						scan_btle="true"
-						scan_btclassic="true"
-						scan_infrepeat=1
-						scan_mute="false"
-						scan_debug="false"
-						scan_targeted="false"
-						scan_privacy=0
-						scan_friendly=0
-						scan_stealth=0
-						skip_ask_1st_scan=0
-						skip_ask_ringtones=0
-						selnum_main=1
-						filter_multilocal=0
-						filter_randomall=0
-						filter_localall=0
-						filter_multiall=0
-						filter_emptyoui=0
-						DATA_SCAN_SECONDS=7
-						custom_oui=""
-						custom_name=""
-						LED MAGENTA
-						if [[ "$archCur" == "pager" ]] ; then
-							btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
-							btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
-							btn_a_state=$(cat "$btn_a_path")
-							btn_b_state=$(cat "$btn_b_path")
-							if [ "$btn_a_state" -eq 0 ] || [ "$btn_b_state" -eq 0 ] ; then
-								echo 1 > "$btn_a_path"
-								echo 1 > "$btn_b_path"
-								# LOG "A + B Button LEDS restored..."
-							fi
-						fi
-						# save config
-						PAYLOAD_SET_CONFIG bluepinesuite DATA_SCAN_SECONDS "$DATA_SCAN_SECONDS"
-						PAYLOAD_SET_CONFIG bluepinesuite scan_btle "$scan_btle"
-						PAYLOAD_SET_CONFIG bluepinesuite scan_btclassic "$scan_btclassic"
-						PAYLOAD_SET_CONFIG bluepinesuite scan_infrepeat "$scan_infrepeat"
-						PAYLOAD_SET_CONFIG bluepinesuite scan_mute "$scan_mute"
-						PAYLOAD_SET_CONFIG bluepinesuite scan_debug "$scan_debug"
-						PAYLOAD_SET_CONFIG bluepinesuite scan_privacy "$scan_privacy"
-						PAYLOAD_SET_CONFIG bluepinesuite scan_friendly "$scan_friendly"
-						PAYLOAD_SET_CONFIG bluepinesuite scan_stealth "$scan_stealth"
-						PAYLOAD_SET_CONFIG bluepinesuite skip_ask_1st_scan "$skip_ask_1st_scan"
-						PAYLOAD_SET_CONFIG bluepinesuite skip_ask_ringtones "$skip_ask_ringtones"
-						PAYLOAD_SET_CONFIG bluepinesuite selnum_main "$selnum_main"
-						PAYLOAD_SET_CONFIG bluepinesuite filter_multilocal "$filter_multilocal"
-						PAYLOAD_SET_CONFIG bluepinesuite filter_randomall "$filter_randomall"
-						PAYLOAD_SET_CONFIG bluepinesuite filter_localall "$filter_localall"
-						PAYLOAD_SET_CONFIG bluepinesuite filter_multiall "$filter_multiall"
-						PAYLOAD_SET_CONFIG bluepinesuite filter_emptyoui "$filter_emptyoui"
-						PAYLOAD_SET_CONFIG bluepinesuite custom_oui "$custom_oui"
-						PAYLOAD_SET_CONFIG bluepinesuite custom_name "$custom_name"
-						LOG "Settings saved..."
-						# defaults from above
-						LOG green "Configuration reset!"
-						LOG "Press OK to continue..."
-						LOG " "
-						WAIT_FOR_BUTTON_PRESS A
-						sleep 0.25
-					fi
-				fi
-				resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL Report + Log Files? ")
-				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-					lootreports=$(find "$LOOT_SCAN" "$LOOT_DETECT" "$LOOT_PROBE" -maxdepth 1 -type f -name "Report*" -print | wc -l)
-					lootdetects=$(find "$LOOT_DETECT" -maxdepth 1 -type f -name "DetectTargets*" -print | wc -l)
-					lootreports=$((lootreports + lootdetects))
-					sleep 1
-					LOG cyan "$lootreports Report Files Found..."	
-					LOG "Debug/Log Files are not counted..."			
-					LOG "Press OK to confirm..."
-					LOG " "
-					WAIT_FOR_BUTTON_PRESS A
-					sleep 0.25
-					resp=$(CONFIRMATION_DIALOG "CONFIRM CLEAR ALL Report + Log Files? - THIS ACTION CANNOT BE REVERSED!")
-					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-						LOG "Deleting files in ${LOOT_SCAN}..."
-						rm -rf "${LOOT_SCAN}"/*
-						LOG "Deleting files in ${LOOT_DETECT}..."
-						rm -rf "${LOOT_DETECT}"/*
-						LOG "Deleting files in ${LOOT_PROBE}..."
-						rm -rf "${LOOT_PROBE}"/*
-						LOG green "Report + Log Files Deleted!"				
-						LOG "Press OK to continue..."
-						LOG " "
-						WAIT_FOR_BUTTON_PRESS A
-						sleep 0.25
-					fi
-				fi
-			elif [[ "$submenu_option" -eq 8 ]]; then
+			elif [[ "$submenu_option" -eq 9 ]]; then
 				while true; do
 					LOG "Extra...."
 					sub_sub_menu_extra
@@ -1032,7 +1134,175 @@ while true; do
 								LOG "Skip Restore Config & History..."
 							fi
 						fi
-					fi
+					elif [[ "$submenu_option" -eq 6 ]]; then
+						LOG "Clear History / Data / Settings...."
+						resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL History / Scan Counts? ")
+						if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+							sleep 1
+							resp=$(CONFIRMATION_DIALOG "CONFIRM CLEAR ALL History / Scan Counts? - THIS ACTION CANNOT BE REVERSED!")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								PAYLOAD_DEL_CONFIG bluepinesuite total_scans
+								PAYLOAD_DEL_CONFIG bluepinesuite total_detected
+								PAYLOAD_DEL_CONFIG bluepinesuite total_scan_min
+								total_scans=0; total_detected=0; total_scan_min=0
+								LOG green "Total Scans + Detected cleared!"				
+								LOG "Press OK to continue..."
+								LOG " "
+								WAIT_FOR_BUTTON_PRESS A
+								sleep 0.25
+							fi
+						fi
+						resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL ${text_target_UC}s / Saved ${text_target_UC}s? ")
+						if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+							sleep 1
+							resp=$(CONFIRMATION_DIALOG "CONFIRM CLEAR ALL ${text_target_UC}s / Saved ${text_target_UC}s? - THIS ACTION CANNOT BE REVERSED!")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								BT_RSSIS=()
+								BT_NAMES=()
+								BT_COMPS=()
+								BT_TARGETS=()
+								BT_APLAIRTG=()
+								BT_AXONCAMS=()
+								BT_CCSKIMMR=()
+								BT_FLIPPERS=()
+								BT_FLOCKCAM=()
+								BT_MESHTAST=()
+								BT_NESTCAMS=()
+								BT_SMRTGLAS=()
+								BT_TILETAGS=()
+								BT_USBKILLS=()
+								BT_PINEAPPS=()
+								BT_CUSTOMOU=()
+								LOG "ALL Scan ${text_target_UC}s cleared!"
+								rm "$SAVEDTARGETS_FILE" 2>/dev/null
+								saved_targets_check
+								LOG "ALL Saved ${text_target_UC}s cleared!"
+								target_mac=""
+								echo "$target_mac" > "$TARGETMAC_FILE"
+								LOG "${text_target_UC} MAC cleared!"
+								LOG green "All ${text_target_UC}s / Saved ${text_target_UC}s cleared..."
+								LOG "Press OK to continue..."
+								LOG " "
+								WAIT_FOR_BUTTON_PRESS A
+								sleep 0.25
+							fi
+						fi
+						resp=$(CONFIRMATION_DIALOG "Do you want to Reset Configuration to Default? ")
+						if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+							sleep 1
+							resp=$(CONFIRMATION_DIALOG "CONFIRM Reset Configuration to Default? - THIS ACTION CANNOT BE REVERSED!")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								LOG "Resetting configuration..."
+								# defaults from above
+								scan_btle="true"
+								scan_btclassic="true"
+								scan_infrepeat=1
+								scan_mute="false"
+								scan_debug="false"
+								scan_targeted="false"
+								scan_privacy=0
+								scan_friendly=0
+								scan_stealth=0
+								skip_ask_1st_scan=0
+								skip_ask_ringtones=0
+								selnum_main=1
+								filter_multilocal=0
+								filter_randomall=0
+								filter_localall=0
+								filter_multiall=0
+								filter_emptyoui=0
+								filter_airtag=0
+								nodes_verified=0
+								lootnodes=0
+								nodes_enabled=0								
+								hotspot_enabled=0
+								previousWiFi=""
+								nodes_ssid="NeedleNetwork"
+								nodes_pw="MyNeedleNetwork65432"
+								nodes_netw="10.42.0.1"
+								nodes_iface="wlan0"
+								scan_btiface="hci0"
+								DATA_SCAN_SECONDS=7
+								custom_oui=""
+								custom_name=""
+								LED MAGENTA
+								if [[ "$archCur" == "pager" ]] ; then
+									btn_a_path="/sys/devices/platform/leds/leds/a-button-led/brightness"
+									btn_b_path="/sys/devices/platform/leds/leds/b-button-led/brightness"
+									btn_a_state=$(cat "$btn_a_path")
+									btn_b_state=$(cat "$btn_b_path")
+									if [ "$btn_a_state" -eq 0 ] || [ "$btn_b_state" -eq 0 ] ; then
+										echo 1 > "$btn_a_path"
+										echo 1 > "$btn_b_path"
+										# LOG "A + B Button LEDS restored..."
+									fi
+								fi
+								# save config
+								PAYLOAD_SET_CONFIG bluepinesuite DATA_SCAN_SECONDS "$DATA_SCAN_SECONDS"
+								PAYLOAD_SET_CONFIG bluepinesuite scan_btle "$scan_btle"
+								PAYLOAD_SET_CONFIG bluepinesuite scan_btclassic "$scan_btclassic"
+								PAYLOAD_SET_CONFIG bluepinesuite scan_infrepeat "$scan_infrepeat"
+								PAYLOAD_SET_CONFIG bluepinesuite scan_mute "$scan_mute"
+								PAYLOAD_SET_CONFIG bluepinesuite scan_debug "$scan_debug"
+								PAYLOAD_SET_CONFIG bluepinesuite scan_privacy "$scan_privacy"
+								PAYLOAD_SET_CONFIG bluepinesuite scan_friendly "$scan_friendly"
+								PAYLOAD_SET_CONFIG bluepinesuite scan_stealth "$scan_stealth"
+								PAYLOAD_SET_CONFIG bluepinesuite skip_ask_1st_scan "$skip_ask_1st_scan"
+								PAYLOAD_SET_CONFIG bluepinesuite skip_ask_ringtones "$skip_ask_ringtones"
+								PAYLOAD_SET_CONFIG bluepinesuite selnum_main "$selnum_main"
+								PAYLOAD_SET_CONFIG bluepinesuite filter_multilocal "$filter_multilocal"
+								PAYLOAD_SET_CONFIG bluepinesuite filter_randomall "$filter_randomall"
+								PAYLOAD_SET_CONFIG bluepinesuite filter_localall "$filter_localall"
+								PAYLOAD_SET_CONFIG bluepinesuite filter_multiall "$filter_multiall"
+								PAYLOAD_SET_CONFIG bluepinesuite filter_emptyoui "$filter_emptyoui"
+								PAYLOAD_SET_CONFIG bluepinesuite filter_airtag "$filter_airtag"
+								PAYLOAD_SET_CONFIG bluepinesuite nodes_enabled "$nodes_enabled"
+								PAYLOAD_SET_CONFIG bluepinesuite hotspot_enabled "$hotspot_enabled"
+								PAYLOAD_SET_CONFIG bluepinesuite previousWiFi "$previousWiFi"
+								PAYLOAD_SET_CONFIG bluepinesuite nodes_ssid "$nodes_ssid"
+								PAYLOAD_SET_CONFIG bluepinesuite nodes_pw "$nodes_pw"
+								PAYLOAD_SET_CONFIG bluepinesuite nodes_iface "$nodes_iface"
+								PAYLOAD_SET_CONFIG bluepinesuite nodes_netw "$nodes_netw"
+								PAYLOAD_SET_CONFIG bluepinesuite scan_btiface "$scan_btiface"
+								PAYLOAD_SET_CONFIG bluepinesuite custom_oui "$custom_oui"
+								PAYLOAD_SET_CONFIG bluepinesuite custom_name "$custom_name"
+								LOG "Settings saved..."
+								# defaults from above
+								LOG green "Configuration reset!"
+								LOG "Press OK to continue..."
+								LOG " "
+								WAIT_FOR_BUTTON_PRESS A
+								sleep 0.25
+							fi
+						fi
+						resp=$(CONFIRMATION_DIALOG "Do you want to CLEAR ALL Report + Log Files? ")
+						if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+							lootreports=$(find "$LOOT_SCAN" "$LOOT_DETECT" "$LOOT_PROBE" -maxdepth 1 -type f -name "Report*" -print | wc -l)
+							lootdetects=$(find "$LOOT_DETECT" -maxdepth 1 -type f -name "DetectTargets*" -print | wc -l)
+							lootreports=$((lootreports + lootdetects))
+							sleep 1
+							LOG cyan "$lootreports Report Files Found..."	
+							LOG "Debug/Log Files are not counted..."			
+							LOG "Press OK to confirm..."
+							LOG " "
+							WAIT_FOR_BUTTON_PRESS A
+							sleep 0.25
+							resp=$(CONFIRMATION_DIALOG "CONFIRM CLEAR ALL Report + Log Files? - THIS ACTION CANNOT BE REVERSED!")
+							if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+								LOG "Deleting files in ${LOOT_SCAN}..."
+								rm -rf "${LOOT_SCAN}"/*
+								LOG "Deleting files in ${LOOT_DETECT}..."
+								rm -rf "${LOOT_DETECT}"/*
+								LOG "Deleting files in ${LOOT_PROBE}..."
+								rm -rf "${LOOT_PROBE}"/*
+								LOG green "Report + Log Files Deleted!"				
+								LOG "Press OK to continue..."
+								LOG " "
+								WAIT_FOR_BUTTON_PRESS A
+								sleep 0.25
+							fi
+						fi
+					fi					
 				done
 			fi
 		done
@@ -1047,7 +1317,7 @@ while true; do
 		target_count="${#BT_TARGETS[@]}"
 		saved_target_count="${#BT_TARGETS_SAVED[@]}"
 		filterCount=0; filterText=""
-		if [[ "$filter_multilocal" -eq 1 && "$filter_randomall" -eq 1 && "$filter_localall" -eq 1 && "$filter_multiall" -eq 1 && "$filter_emptyoui" -eq 1 ]] ; then
+		if [[ "$filter_multilocal" -eq 1 && "$filter_randomall" -eq 1 && "$filter_localall" -eq 1 && "$filter_multiall" -eq 1 && "$filter_emptyoui" -eq 1 && "$filter_airtag" -eq 1 ]] ; then
 			filterCount=1
 			filterText="ALL Filters Enabled"
 		else
@@ -1071,6 +1341,10 @@ while true; do
 				filterCount=$((filterCount + 1))
 				if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, ALL Rand"; else filterText="ALL Rand"; fi
 			fi
+			if [[ "$filter_airtag" -eq 1 ]] ; then
+				filterCount=$((filterCount + 1))
+				if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, AirTag"; else filterText="AirTag"; fi
+			fi
 		fi
 		if [[ "$scan_privacy" -eq 1 ]] ; then MAC_CHECK="${MAC_CHECK:0:2}:░░:░░:░░:░░:░░"; NAME_CHECK="$priv_name_txt"; fi
 		LOG magenta "================================ Device Info ===="
@@ -1079,19 +1353,32 @@ while true; do
 		if [[ "$enable_CSR_func" -eq 1 ]] ; then
 			LOG green "CSR Functionality Enabled | Loot/Reports: $lootreports"
 		else
-			LOG red "CSR Functionality DISABLED | Loot/Reports: $lootreports"
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG red "CSR Functionality Disabled | Loot/Reports: $lootreports"
+			else
+				LOG blue "CSR Functionality Disabled | Loot/Reports: $lootreports"
+			fi
 		fi
+		# echo "gps_coord_cache_file: $gps_coord_cache_file"
 		gpspos_cur=$(GPS_GET)
 		if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
 			gpspos_last="$gpspos_cur" # GPS is valid
 		fi
 		if [[ -n "$gpspos_last" ]] ; then
-			# requires no quote on end
+			# format after decimal
 			printf -v gps_formatted "%.4f %.4f %.4f %.4f" $gpspos_last
+			# gps_formatted="$gpspos_last"
 			if [[ "$scan_privacy" -eq 1 ]] ; then 
 				LOG "GPS Last Pos.: -+ Hidden +-"
 			else
 				LOG "GPS Last Pos.: $gps_formatted"
+			fi
+		fi
+		if [[ "$nodes_enabled" -eq 1 ]]; then
+			if [[ "$nodes_verified" -eq 1 ]]; then
+				LOG "Node(s) Verified! | Pine Needle(s) Active: $lootnodes"
+			else
+				LOG "Node(s) Enabled! | Pine Needle(s) Active: $lootnodes"
 			fi
 		fi
 		sleep 1
