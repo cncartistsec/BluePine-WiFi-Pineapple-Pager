@@ -2,6 +2,7 @@
 # by cncartist
 #
 # Built for BluePine ClockworkPi uConsole GPS Implementation
+# dependencies: pygnssutils, pyserial
 #
 # To Run:
 # python3 gps_stream.py
