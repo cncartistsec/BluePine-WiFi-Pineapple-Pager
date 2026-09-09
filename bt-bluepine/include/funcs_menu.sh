@@ -1,7 +1,7 @@
 #!/bin/bash
 # Menu Functions for BluePine
 # Author: cncartist
-# Version: 1.5
+# Version: 1.6
 # 
 # check_dependencies
 # check_ringtones
@@ -25,6 +25,13 @@
 # localall_config
 # multiall_config
 # emptyoui_config
+#
+# node_config
+# node_wifimgmtap
+# node_start_hotspot
+# node_stop_hotspot
+# node_handle
+# node_verify
 # 
 # enter_custom_name
 # enter_custom_oui
@@ -36,32 +43,16 @@
 # sub_menu_preferences
 # 
 # sub_sub_menu_managebt
+# sub_sub_menu_nodecfg
+# sub_sub_menu_managegps
 # sub_sub_menu_extra
 # 
 
 
 # Check for required tools
 check_dependencies() {
-	if ! command -v hciconfig &> /dev/null; then
-		ERROR_DIALOG "hciconfig not installed"
-		if [[ "$archCur" == "pager" ]] ; then
-			LOG red "Install with: opkg update && opkg install bluez-utils"
-		else
-			LOG red "Install with: apt update && apt install bluez-utils"
-		fi
-		exit 1
-	fi
-	if ! command -v btmon &> /dev/null; then
-		ERROR_DIALOG "btmon not installed"
-		if [[ "$archCur" == "pager" ]] ; then
-			LOG red "Install with: opkg update && opkg install bluez-utils"
-		else
-			LOG red "Install with: apt update && apt install bluez-utils"
-		fi
-		exit 1
-	fi
-	if ! command -v bluetoothctl &> /dev/null; then
-		ERROR_DIALOG "bluetoothctl not installed"
+	if ! command -v hciconfig &> /dev/null || ! command -v btmon &> /dev/null || ! command -v bluetoothctl &> /dev/null; then
+		ERROR_DIALOG "bluetoothctl / btmon / hciconfig (bluez-utils) not installed"
 		if [[ "$archCur" == "pager" ]] ; then
 			LOG red "Install with: opkg update && opkg install bluez-utils"
 		else
@@ -76,7 +67,7 @@ check_dependencies() {
 	# 
 	# NEW <root> grep -V
 	# grep (GNU grep) 3.11
-	local evtestCheck=0; local grepCheck=0; local jqCheck=0; local ouiCheck=0; local count=0; local limit=3; local substring="BusyBox v"; local substring2='grep (GNU grep)'
+	local evtestCheck=0; local gpsdepCheck=0; local grepCheck=0; local jqCheck=0; local ouiCheck=0; local count=0; local limit=3; local substring="BusyBox v"; local substring2='grep (GNU grep)'
 	# check grep
 	while IFS= read -r line && [[ "$count" -lt "$limit" ]] ; do
 		if [[ "$line" == *"$substring2"* ]]; then
@@ -88,6 +79,7 @@ check_dependencies() {
 		grep -V
 	)
 	if [[ "$archCur" == "pager" ]] ; then
+		gpsdepCheck=1
 		jqCheck=1
 		ouiCheck=1
 		# check evtest
@@ -96,6 +88,17 @@ check_dependencies() {
 		fi
 	else
 		evtestCheck=1
+		# check gpsdep
+		if command -v python3 &> /dev/null; then
+			# echo "passed"
+			if python3 -c "import pygnssutils, serial" &> /dev/null || python3 -m pip show pygnssutils &> /dev/null || "$PYTHONVENV_FILE" -m pip show pygnssutils &> /dev/null; then
+				gpsdepCheck=1
+				# check device exists first
+				gps_verify_deb
+				# gps_enabled=1
+				# echo "passed!"
+			fi
+		fi
 		# check jq
 		if command -v jq &> /dev/null; then
 			jqCheck=1
@@ -105,7 +108,7 @@ check_dependencies() {
 			ouiCheck=1
 		fi
 	fi
-	if [[ "$grepCheck" -eq 0 || "$evtestCheck" -eq 0  || "$jqCheck" -eq 0  || "$ouiCheck" -eq 0 ]]; then
+	if [[ "$gpsdepCheck" -eq 0 || "$grepCheck" -eq 0 || "$evtestCheck" -eq 0  || "$jqCheck" -eq 0  || "$ouiCheck" -eq 0 ]]; then
 		local dependText=""
 		# ask if they want to install now
 		# without grep the app will run but, device names will show as "Unknown"
@@ -119,6 +122,13 @@ check_dependencies() {
 				# dependText="GNU grep & evtest"
 			else
 				dependText="evtest"
+			fi
+		fi
+		if [[ "$gpsdepCheck" -eq 0 ]]; then
+			if [[ -n "$dependText" ]]; then
+				dependText="${dependText} & python3 (dependencies)"
+			else
+				dependText="python3 (dependencies)"
 			fi
 		fi
 		if [[ "$jqCheck" -eq 0 ]]; then
@@ -201,6 +211,12 @@ Install automatically now?")
 							LOG "Please wait..."
 							apt install grep -y
 						fi
+						if [[ "$gpsdepCheck" -eq 0 ]]; then
+							LOG "Checking python3 & dependencies..."
+							# LOG "Please wait..."
+							# apt install python3 -y
+							check_pygnss
+						fi
 						if [[ "$jqCheck" -eq 0 ]]; then
 							LOG "Installing jq..."
 							LOG "Please wait..."
@@ -215,10 +231,18 @@ Install automatically now?")
 						LOG green "Packages installed!"
 					else
 						LOG red "'apt update' failed. Check network..."
+						LOG "Please check network and retry..."
+						LOG blue  "================================================="
+						sleep 1
+						exit 1
 					fi
 				fi
 			else
 				LOG red "Network connection is down..."
+				LOG "Please connect device to internet and retry..."
+				LOG blue  "================================================="
+				sleep 1
+				exit 1
 			fi
 			LOG blue  "================================================="
 		else
@@ -235,7 +259,7 @@ Required: $dependText not installed!"
 				LOG "opkg install evtest"
 			else
 				LOG "apt update"
-				LOG "apt install grep jq ieee-data"
+				LOG "apt install grep python3 jq ieee-data"
 				LOG "update-ieee-data"
 			fi
 			LOG blue  "================================================="
@@ -243,7 +267,7 @@ Required: $dependText not installed!"
 			if [[ "$archCur" == "pager" ]] ; then
 				LOG "opkg update && opkg install grep && opkg install evtest"
 			else
-				LOG "apt update && apt install grep jq ieee-data -y && update-ieee-data"
+				LOG "apt update && apt install grep python3 jq ieee-data -y && update-ieee-data"
 			fi
 			LOG blue  "================================================="
 			sleep 1
@@ -316,16 +340,48 @@ Copy them to your pagers ringtone dir for an optimal experience?")
 
 # External Bluetooth Adapter?
 external_bt_check() {
+	local foundBT=0
+	# check for hci1 or other
+	if [[ "$scan_btiface" != "hci0" ]] && hciconfig | grep -q $scan_btiface; then 
+		foundBT=1
+		BLE_IFACE="$scan_btiface"
+	else
+		sleep 0.25
+	fi
+	if [[ "$foundBT" -eq 0 ]] && hciconfig | grep -q hci1; then 
+		foundBT=1
+		BLE_IFACE="hci1"
+		scan_btiface="hci1"
+	fi
 	# Bluetooth: Can't init device hci1: Operation not possible due to RF-kill (132)
 	# possible to need to turn off bluetooth and back on to allow adapter to be enabled
-	if hciconfig | grep -q hci1; then
-		resp=$(CONFIRMATION_DIALOG "Do you have USB/External Bluetooth enabled & plugged in?")
+	if [[ "$foundBT" -eq 1 || "$scan_btiface" != "hci0" ]] ; then
+		if [[ "$archCur" == "pager" ]] ; then
+			resp=$(CONFIRMATION_DIALOG "Do you have USB/External Bluetooth enabled & plugged in?")
+		else
+			resp='y'
+		fi
 	else
 		resp='n'
 	fi
+	
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-		if hciconfig | grep -q hci1; then
-			BLE_IFACE="hci1"
+		if [[ "$foundBT" -eq 0 ]] ; then
+			if [[ "$archCur" != "pager" ]] ; then sleep 0.25; fi
+			# check for hci1 or other
+			if [[ "$scan_btiface" != "hci0" ]] && hciconfig | grep -q $scan_btiface; then 
+				foundBT=1
+				BLE_IFACE="$scan_btiface"
+			else
+				sleep 0.25
+			fi
+			if [[ "$foundBT" -eq 0 ]] && hciconfig | grep -q hci1; then 
+				foundBT=1
+				BLE_IFACE="hci1"
+				scan_btiface="hci1"
+			fi
+		fi
+		if [[ "$foundBT" -eq 1 ]] ; then
 			CSR_CHECK=$(hciconfig -a $BLE_IFACE | grep 'Manufacturer: Cambridge Silicon Radio' | awk '{print $1}')
 			# LOG red "CSR_CHECK: $CSR_CHECK"
 			if [[ -z "$CSR_CHECK" ]]; then
@@ -348,6 +404,7 @@ external_bt_check() {
 						if [[ "$loop" -eq 5 ]] ; then
 							LOG red   "== ERROR: Interface DOWN after $loop tries!: $BLE_IFACE ==="
 							BLE_IFACE="hci0"
+							scan_btiface="hci0"
 							break
 						fi
 					else
@@ -367,20 +424,27 @@ external_bt_check() {
 				enable_CSR_func=1
 			else
 				LOG blue  "================================================="
-				LOG red   "======== ERROR! $BLE_IFACE Found, but not CSR! ========"
-				LOG red   "========= Functionality may be limited! ========="
-				LOG blue  "================================================="
-				LOG " "
 				if [[ "$archCur" == "pager" ]] ; then
+					LOG red   "======== ERROR! $BLE_IFACE Found, but not CSR! ========"
+					LOG red   "========= Functionality may be limited! ========="
+					LOG blue  "================================================="
+					LOG "Changing MAC Address will not work..."
+					LOG " "
 					LOG magenta "Have CSR BT but booted Pager with USB plugged in?"
 					LOG cyan "If so, please reboot the Pager without USB BT."
 					LOG cyan "Then Plugin USB BT after boot..."
+					LOG " "
 				else
+					LOG blue   "========= NOTICE: $BLE_IFACE NOT seen as CSR ========="
+					LOG blue  "================================================="
+					LOG "Changing MAC Address will not work..."
+					LOG " "
+					LOG "To Resolve if Adapter is CSR:"
+					LOG blue  "================================================="
 					LOG magenta "Have External Bluetooth but Adapter Down from 'rfkill'?"
-					LOG cyan "Check with: 'sudo hciconfig hci1 up'"
-					LOG cyan "If so, turn off Bluetooth and back on via desktop taskbar and 'Retest CSR'."
+					LOG cyan "If so, turn off Bluetooth and back on via taskbar and 'Retest CSR'."
+					LOG cyan "Check with: 'sudo hciconfig $scan_btiface up'"
 				fi
-				LOG " "
 				LOG magenta  "Also try unplugging and replugging USB BT, then"
 				LOG magenta  "Re-check at Preferences > Bluetooth > Retest CSR"
 				LOG blue  "================================================="
@@ -391,10 +455,12 @@ external_bt_check() {
 		else
 			BLE_IFACE="hci0"
 			LOG blue "================================================="
-			LOG red  "========= ERROR! Device hci1 Not found! ========="
+			LOG red  "========= ERROR! Device $scan_btiface Not found! ========="
 			LOG red  "========== Using $BLE_IFACE / Default Device =========="
-			LOG red  "========= Functionality may be limited! ========="
-			LOG red  "Try unplugging and replugging USB BT, then"
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG red  "========= Functionality may be limited! ========="
+				LOG red  "Try unplugging and replugging USB BT, then"
+			fi
 			LOG red  "Re-check at Preferences > Bluetooth > Retest CSR"
 			LOG blue "================================================="
 			LOG "Press OK to continue..."
@@ -405,7 +471,7 @@ external_bt_check() {
 		BLE_IFACE="hci0"
 		LOG blue  "========== Using $BLE_IFACE / Default Device =========="
 	fi
-	if [[ "$BLE_IFACE" == "hci0" ]]; then
+	if [[ "$BLE_IFACE" == "hci0" && "$archCur" == "pager" ]]; then
 		rssitxt_switch="rssitxtsw_hci0"
 	else
 		rssitxt_switch="rssitxtsw_hci1"
@@ -424,14 +490,14 @@ bluetoothd_check() {
 		# LOG red "in loop"
 		loop=$((loop + 1))
 		if service $servicebt_cur status | grep -q "not"; then
+			if [[ "$loop" -eq 6 ]] ; then
+				# echo "== NOT RUNNING after $loop tries! ==="
+				break
+			fi
 			# echo "NOT RUNNING"
 			# echo "trying restart..."
 			service $servicebt_cur restart
 			sleep 1
-			if [[ "$loop" -eq 5 ]] ; then
-				# echo "== NOT RUNNING after $loop tries! ==="
-				break
-			fi
 		else
 			# echo "RUNNING!"
 			break
@@ -459,6 +525,7 @@ global_config() {
 		filter_localall=0
 		filter_multiall=0
 		filter_emptyoui=0
+		filter_airtag=0
 		# DONE = SET HERE - Custom config for quick scans
 		
 		LOG green "Default settings selected..."	
@@ -492,7 +559,7 @@ global_config() {
 		else
 			LOG cyan " - Ask to Save Results after 1st Scan Disabled"
 		fi
-		if [[ "$filter_multilocal" -eq 1 || "$filter_randomall" -eq 1 || "$filter_localall" -eq 1 || "$filter_multiall" -eq 1 || "$filter_emptyoui" -eq 1 ]] ; then
+		if [[ "$filter_multilocal" -eq 1 || "$filter_randomall" -eq 1 || "$filter_localall" -eq 1 || "$filter_multiall" -eq 1 || "$filter_emptyoui" -eq 1 || "$filter_airtag" -eq 1 ]] ; then
 			LOG cyan " - Filter(s) Enabled"
 		else
 			LOG cyan " - Filter(s) Disabled"
@@ -511,6 +578,7 @@ global_config() {
 		PAYLOAD_SET_CONFIG bluepinesuite filter_localall "$filter_localall"
 		PAYLOAD_SET_CONFIG bluepinesuite filter_multiall "$filter_multiall"
 		PAYLOAD_SET_CONFIG bluepinesuite filter_emptyoui "$filter_emptyoui"
+		PAYLOAD_SET_CONFIG bluepinesuite filter_airtag "$filter_airtag"
 		
 		LOG "Settings saved..."
 		LOG green "Configuration complete!"
@@ -714,8 +782,8 @@ filter_config() {
 	local filters_disabled=0
 	local filterText=""
 	
-	if [[ "$filter_multilocal" -eq 1 || "$filter_randomall" -eq 1 || "$filter_localall" -eq 1 || "$filter_multiall" -eq 1 || "$filter_emptyoui" -eq 1 ]] ; then
-		if [[ "$filter_multilocal" -eq 1 && "$filter_randomall" -eq 1 && "$filter_localall" -eq 1 && "$filter_multiall" -eq 1 && "$filter_emptyoui" -eq 1 ]] ; then
+	if [[ "$filter_multilocal" -eq 1 || "$filter_randomall" -eq 1 || "$filter_localall" -eq 1 || "$filter_multiall" -eq 1 || "$filter_emptyoui" -eq 1 || "$filter_airtag" -eq 1 ]] ; then
+		if [[ "$filter_multilocal" -eq 1 && "$filter_randomall" -eq 1 && "$filter_localall" -eq 1 && "$filter_multiall" -eq 1 && "$filter_emptyoui" -eq 1 && "$filter_airtag" -eq 1 ]] ; then
 			LOG blue "================================================="
 			LOG cyan "Filters Currently Removing MACs with:"
 			LOG blue "================================================="
@@ -723,7 +791,7 @@ filter_config() {
 			LOG blue "================================================="
 			LOG "First Octet Matching (x = Wildcard): x2, x3, x6, x7, xA, xB, xE, xF"
 			LOG blue "================================================="
-			LOG "OUI Matching: '00:00:00'"
+			LOG "OUI Matching: '00:00:00' + AirTags"
 			LOG blue "================================================="
 			
 			PROMPT "Filters Currently Removing MACs with:
@@ -734,7 +802,7 @@ First Octet Matching: 01, 02, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF
 First Octet Matching (x = Wildcard):
 x2, x3, x6, x7, xA, xB, xE, xF
 			
-OUI Matching: '00:00:00'"
+OUI Matching: '00:00:00' + AirTags"
 		else
 			LOG blue "================================================="
 			LOG cyan "Filters Currently Removing MACs with:"
@@ -789,11 +857,27 @@ x3, x7, xB, xF"
 				fi
 			fi
 			if [[ "$filter_emptyoui" -eq 1 ]] ; then
-				LOG "OUI Matching: '00:00:00'"
+				if [[ "$filter_airtag" -eq 1 ]] ; then
+					LOG "OUI Matching: '00:00:00' + AirTags"
+				else
+					LOG "OUI Matching: '00:00:00'"
+				fi
+				LOG blue "================================================="
+				if [[ "$filter_airtag" -eq 1 ]] ; then
+					filterText="${filterText}
+				
+OUI Matching: '00:00:00' + AirTags"
+				else
+					filterText="${filterText}
+				
+OUI Matching: '00:00:00'"
+				fi
+			elif [[ "$filter_airtag" -eq 1 ]] ; then
+				LOG "Apple AirTags"
 				LOG blue "================================================="
 				filterText="${filterText}
 				
-OUI Matching: '00:00:00'"
+Apple AirTags"
 			fi
 			PROMPT "$filterText"
 		fi
@@ -809,11 +893,13 @@ Disable All Filters for Device ${text_hunt_UC}er Scan, allowing all ${text_targe
 			filter_localall=0
 			filter_multiall=0
 			filter_emptyoui=0
+			filter_airtag=0
 			PAYLOAD_SET_CONFIG bluepinesuite filter_multilocal "$filter_multilocal"
 			PAYLOAD_SET_CONFIG bluepinesuite filter_randomall "$filter_randomall"
 			PAYLOAD_SET_CONFIG bluepinesuite filter_localall "$filter_localall"
 			PAYLOAD_SET_CONFIG bluepinesuite filter_multiall "$filter_multiall"
 			PAYLOAD_SET_CONFIG bluepinesuite filter_emptyoui "$filter_emptyoui"
+			PAYLOAD_SET_CONFIG bluepinesuite filter_airtag "$filter_airtag"
 		else
 			LOG "Skipped Disabling Filters..."
 		fi
@@ -831,11 +917,25 @@ WARNING: Filters REMOVE real ${text_target_LC}s from report/display and only app
 			multiall_config
 			localall_config
 			randomall_config
+			airtag_config
 		else
 			LOG "Skipped Modifying Filters..."
 		fi
 	fi
 	settings_check
+}
+airtag_config() {
+	resp=$(CONFIRMATION_DIALOG "Filter:
+	
+Remove Apple AirTags from Node Results?")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		filter_airtag=1
+		LOG "Filter AirTags Enabled..."
+	else
+		filter_airtag=0
+		LOG "Filter AirTags Disabled..."
+	fi
+	PAYLOAD_SET_CONFIG bluepinesuite filter_airtag "$filter_airtag"
 }
 multilocal_config() {
 	resp=$(CONFIRMATION_DIALOG "Basic Filter:
@@ -902,6 +1002,447 @@ Remove ALL Multicast (01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF) MACs?")
 	fi
 	PAYLOAD_SET_CONFIG bluepinesuite filter_multiall "$filter_multiall"
 }
+
+
+# Node/Pine Needle support
+node_config() {
+	if [[ "$nodes_enabled" -eq 0 ]]; then
+		local socatCheck=0
+		resp=$(CONFIRMATION_DIALOG "Enable Node(s)/Pine Needle(s)?")
+		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+			# check socat
+			if command -v socat &> /dev/null; then
+				socatCheck=1
+			fi
+			if [[ "$socatCheck" -eq 0 ]]; then
+				resp=$(CONFIRMATION_DIALOG "Dependency not met for Pine Needle(s)!
+			
+	Required: socat
+			
+	Install automatically now?")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					LOG blue  "================================================="
+					LOG "Starting package install..."
+					sleep 1
+					count=0
+					if [[ "$archCur" == "pager" ]] ; then
+						while [[ -f "/var/lock/opkg.lock" ]] && [[ "$count" -lt 3 ]] ; do
+							LOG red "Opkg currently locked by a process. Waiting..."
+							sleep 5
+							count=$((count + 1))
+						done
+					else
+						while [[ "$count" -lt 3 ]] ; do
+							if ps aux | grep -i [a]pt > /dev/null; then
+								LOG red "Apt currently locked by a process. Waiting..."
+								sleep 5
+								count=$((count + 1))
+							else
+								# echo "No update/upgrade running"
+								break
+							fi
+						done
+					fi
+					# Check Network enabled
+					count=1 # Number of packets to send
+					timeout=3 # Seconds to wait for a response
+					if ping -c $count -w $timeout "8.8.8.8" > /dev/null 2>&1; then
+						LOG "Network connection is active..."
+						if [[ "$archCur" == "pager" ]] ; then
+							LOG "Running 'opkg update'"
+						else
+							LOG "Running 'apt update'"
+						fi
+						LOG "Please wait..."
+						if [[ "$archCur" == "pager" ]] ; then
+							# opkg update && opkg install socat
+							if opkg update; then
+								LOG green "'opkg update' successful."
+								LOG "Installing socat..."
+								LOG "Please wait..."
+								opkg install socat
+								LOG green "Package installed!"
+							else
+								LOG red "'opkg update' failed. Check network..."
+							fi
+						else
+							# apt update && apt install socat
+							if apt update; then
+								LOG green "'apt update' successful."
+								LOG "Installing socat..."
+								LOG "Please wait..."
+								apt install socat -y
+								LOG green "Package installed!"
+								mkdir -p "$LOOT_NODES"
+								nodes_enabled=1
+								PAYLOAD_SET_CONFIG bluepinesuite nodes_enabled "$nodes_enabled"
+								LOG "Pine Needle Support Enabled..."
+							else
+								LOG red "'apt update' failed. Check network..."
+							fi
+						fi
+					else
+						LOG red "Network connection is down..."
+					fi
+					LOG blue  "================================================="
+				else
+					ERROR_DIALOG "Dependency not met for Pine Needle Support:
+					
+	Required: socat not installed!"
+					LOG red   "===================================== CRITICAL =="
+					LOG red   "== Dependency not met: socat"
+					LOG red   "===================================== CRITICAL =="
+					LOG cyan "== Install with ->"
+					if [[ "$archCur" == "pager" ]] ; then
+						LOG "opkg update"
+						LOG "opkg install socat"
+					else
+						LOG "apt update"
+						LOG "apt install socat"
+					fi
+					LOG blue  "================================================="
+					LOG cyan "== Or all in one command ->"
+					if [[ "$archCur" == "pager" ]] ; then
+						LOG "opkg update && opkg install socat"
+					else
+						LOG "apt update && apt install socat"
+					fi
+					LOG blue  "================================================="
+					sleep 1
+					# exit 1
+				fi
+			else
+				mkdir -p "$LOOT_NODES"
+				nodes_enabled=1
+				PAYLOAD_SET_CONFIG bluepinesuite nodes_enabled "$nodes_enabled"
+				LOG "Pine Needle Support Enabled..."
+			fi
+		fi
+	else
+		resp=$(CONFIRMATION_DIALOG "Disable Pine Needle(s)?")
+		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+			nodes_enabled=0
+			PAYLOAD_SET_CONFIG bluepinesuite nodes_enabled "$nodes_enabled"
+			nodes_verified=0
+			LOG "Pine Needle(s) Disabled..."
+			if [[ "$hotspot_enabled" -eq 1 ]]; then
+				node_stop_hotspot
+			fi
+		fi
+	fi
+	
+	if [[ "$nodes_enabled" -eq 1 ]]; then
+		if [[ "$archCur" == "pager" ]] ; then
+			local cur_wlan0mgmt=$(uci get wireless.wlan0mgmt.disabled)
+			local cur_wlan0mgmt_ssid=$(uci get wireless.wlan0mgmt.ssid)
+			local cur_wlan0mgmt_pw=$(uci get wireless.wlan0mgmt.key)
+			LOG " "
+			LOG "To Connect Pine Needle(s) to Pager:"
+			LOG "1. Ensure Pager MGMT AP is On"
+			if [[ "$cur_wlan0mgmt" -eq 1 ]] ; then
+				LOG red "-- Pager Mgmt AP Disabled!"
+			fi
+			LOG "2. Connect Pine Needle(s) to Pager MGMT AP"
+			if [[ -n "$cur_wlan0mgmt_ssid" ]] ; then 
+				if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$cur_wlan0mgmt_ssid"; cur_wlan0mgmt_ssid="-+ Hidden +-"; fi
+				LOG "-- MGMT AP: $cur_wlan0mgmt_ssid"
+				if [[ "$scan_privacy" -eq 1 ]] ; then cur_wlan0mgmt_ssid="$priv_mac_save"; fi
+			else
+				LOG "-- MGMT AP NOT CONFIGURED"
+			fi
+			
+			if [[ -n "$cur_wlan0mgmt_pw" ]] ; then 
+				if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$cur_wlan0mgmt_pw"; cur_wlan0mgmt_pw="-+ Hidden +-"; fi
+				LOG "-- Password: $cur_wlan0mgmt_pw"
+				if [[ "$scan_privacy" -eq 1 ]] ; then cur_wlan0mgmt_pw="$priv_mac_save"; fi
+			else
+				LOG "-- Password NOT CONFIGURED"
+			fi
+			
+			if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$nodes_netw_pgr"; nodes_netw_pgr="-+ Hidden +-"; fi
+			LOG "-- Server IP: $nodes_netw_pgr"
+			if [[ "$scan_privacy" -eq 1 ]] ; then nodes_netw_pgr="$priv_mac_save"; fi
+			LOG "3. Verify Pine Needle(s) in Next Step"
+			LOG "4. Scan or Detect with Pine Needles"
+			LOG " "
+			if [[ -n "$cur_wlan0mgmt_ssid" && -n "$cur_wlan0mgmt_pw" && "$cur_wlan0mgmt" -eq 1 ]] ; then 
+				LOG "Pager Mgmt AP can be enabled after confirming the above details are accurate."
+			fi
+			LOG "Press OK to confirm..."
+			LOG " "
+			WAIT_FOR_BUTTON_PRESS A
+			sleep 0.5
+			
+			# re-check in case they turned on from SSH
+			cur_wlan0mgmt=$(uci get wireless.wlan0mgmt.disabled)
+			if [[ -n "$cur_wlan0mgmt_ssid" && -n "$cur_wlan0mgmt_pw" && "$cur_wlan0mgmt" -eq 1 ]] ; then 
+				node_wifimgmtap
+			fi
+			node_verify
+		else
+			if [[ "$hotspot_enabled" -eq 0 ]]; then
+				node_start_hotspot
+			fi
+			if [[ "$hotspot_enabled" -eq 1 ]]; then
+				node_verify
+			fi
+		fi
+	fi
+}
+
+# enable/disable wifimgmtap function
+node_wifimgmtap() {
+	local cur_wlan0mgmt=$(uci get wireless.wlan0mgmt.disabled)
+	local cur_wlan0mgmt_ssid=$(uci get wireless.wlan0mgmt.ssid)
+	local cur_wlan0mgmt_pw=$(uci get wireless.wlan0mgmt.key)
+	
+	if [[ -n "$cur_wlan0mgmt_ssid" && -n "$cur_wlan0mgmt_pw" && "$cur_wlan0mgmt" -eq 1 ]] ; then
+		# ask if they want to enable mgmt ap at current time, if creds exist and disabled
+		if [[ "$silent_action" -eq 0 ]] ; then 
+			resp=$(CONFIRMATION_DIALOG "Enable Pager MGMT AP Now?")
+		else
+			resp="$DUCKYSCRIPT_USER_CONFIRMED"
+		fi
+		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+			if [[ "$silent_action" -eq 0 ]] ; then
+				LOG "Enabling Pager MGMT AP..."
+				LOG "Please wait..."
+			fi
+			# don't need to set whole mgmt ap details
+			# ((WIFI_MGMT_AP wlan0mgmt "$cur_wlan0mgmt_ssid" psk2 "$cur_wlan0mgmt_pw") &) > /dev/null 2>&1
+			uci set wireless.wlan0mgmt.disabled='0' 2>/dev/null
+			uci commit wireless 2>/dev/null
+			wifi reload 2>/dev/null
+			sleep 9
+			if [[ "$silent_action" -eq 0 ]] ; then
+				LOG green "Pager MGMT AP Enabled!"
+				LOG " "
+				LOG "Press OK to confirm..."
+				LOG " "
+				WAIT_FOR_BUTTON_PRESS A
+			fi
+		else
+			LOG "Skipped Enabling Pager MGMT AP..."
+		fi
+	elif [[ -n "$cur_wlan0mgmt_ssid" && -n "$cur_wlan0mgmt_pw" && "$cur_wlan0mgmt" -eq 0 && "$silent_action" -eq 0 ]]; then
+		resp=$(CONFIRMATION_DIALOG "Disable Pager MGMT AP Now?")
+		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+			LOG "Disabling Pager MGMT AP..."
+			LOG "Please wait..."
+			uci set wireless.wlan0mgmt.disabled='1' 2>/dev/null
+			uci commit wireless 2>/dev/null
+			wifi reload 2>/dev/null
+			# WIFI_MGMT_AP_DISABLE wlan0mgmt - resets credentials/clears - don't use
+			sleep 3
+			LOG green "Pager MGMT AP Disabled!"
+			LOG " "
+			LOG "Press OK to confirm..."
+			LOG " "
+			WAIT_FOR_BUTTON_PRESS A
+		else
+			LOG "Skipped Disabling Pager MGMT AP..."
+		fi
+	elif [[ -z "$cur_wlan0mgmt_ssid" || -z "$cur_wlan0mgmt_pw" ]]; then
+		LOG red "Pager MGMT AP Credentials Missing!"
+		LOG cyan "Configure in Pager Menu:"
+		LOG cyan "Settings > Network > Management AP Setup"
+		LOG " "
+	fi
+}
+
+# enable hotspot function
+node_start_hotspot() {
+	if [[ "$silent_action" -eq 0 ]] ; then
+		resp=$(CONFIRMATION_DIALOG "Enable Hotspot on ${nodes_iface} for Pine Needle(s) Connection?
+				
+NOTICE!
+This will change your ${nodes_iface} to disconnect from your current connection and turn it into a local Hotspot.")
+	else
+		resp='y'
+	fi
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		previousWiFi=$(iwgetid $nodes_iface --raw)
+		PAYLOAD_SET_CONFIG bluepinesuite previousWiFi "$previousWiFi"
+		# if [[ "$silent_action" -eq 0 ]] ; then LOG "Disabling Hotspot on ${nodes_iface}..."; fi
+		((nmcli connection down Hotspot) &) > /dev/null 2>&1
+		sleep 1
+		if [[ "$silent_action" -eq 0 ]] ; then LOG "Clearing previous settings..."; fi
+		((nmcli connection delete Hotspot) &) > /dev/null 2>&1
+		sleep 1
+		if [[ "$silent_action" -eq 0 ]] ; then LOG "Setting up Hotspot on ${nodes_iface}..."; fi
+		((nmcli device wifi hotspot ifname $nodes_iface ssid "$nodes_ssid" password "$nodes_pw") &) > /dev/null 2>&1
+		sleep 3.5
+		if [[ "$silent_action" -eq 0 ]] ; then LOG "Configuring Hotspot..."; fi
+		((nmcli connection modify Hotspot ipv4.addresses $nodes_netw/24) &) > /dev/null 2>&1
+		sleep 1
+		((nmcli connection reload) &) > /dev/null 2>&1
+		sleep 1
+		((nmcli connection up Hotspot) &) > /dev/null 2>&1
+		sleep 3
+		hotspot_enabled=1
+		PAYLOAD_SET_CONFIG bluepinesuite hotspot_enabled "$hotspot_enabled"
+		if [[ "$silent_action" -eq 0 ]] ; then
+			LOG green "Hotspot Enabled!"
+			LOG " "
+			if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$nodes_ssid"; nodes_ssid="-+ Hidden +-"; fi
+			LOG "1. Connect Pine Needle(s) to: $nodes_ssid"
+			if [[ "$scan_privacy" -eq 1 ]] ; then nodes_ssid="$priv_mac_save"; fi
+			
+			if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$nodes_pw"; nodes_pw="-+ Hidden +-"; fi
+			LOG "-- Password: $nodes_pw"
+			if [[ "$scan_privacy" -eq 1 ]] ; then nodes_pw="$priv_mac_save"; fi
+			
+			if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$nodes_netw"; nodes_netw="-+ Hidden +-"; fi
+			LOG "-- Server IP: $nodes_netw"
+			if [[ "$scan_privacy" -eq 1 ]] ; then nodes_netw="$priv_mac_save"; fi
+			LOG "2. Verify Pine Needle(s) in Next Step"
+			LOG "3. Scan or Detect with Pine Needles"
+			LOG " "
+			LOG "Press OK to confirm..."
+			LOG " "
+			WAIT_FOR_BUTTON_PRESS A
+		fi
+		sleep 0.5
+	fi
+}
+
+# disable hotspot function
+node_stop_hotspot() {
+	if [[ "$silent_action" -eq 0 ]] ; then
+		if [[ "$previousWiFi" != "" ]] ; then
+			if [[ "$scan_privacy" -eq 1 ]] ; then 
+				resp=$(CONFIRMATION_DIALOG "Return WiFi to previous Connection?")
+			else
+				resp=$(CONFIRMATION_DIALOG "Return WiFi to previous Connection (${previousWiFi})?")
+			fi
+		else
+			resp=$(CONFIRMATION_DIALOG "Return WiFi to previous state?")
+		fi
+	else
+		resp='y'
+	fi
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		if [[ "$silent_action" -eq 0 ]] ; then LOG "Disabling Hotspot on ${nodes_iface}..."; fi
+		((nmcli connection down Hotspot) &) > /dev/null 2>&1
+		hotspot_enabled=0
+		PAYLOAD_SET_CONFIG bluepinesuite hotspot_enabled "$hotspot_enabled"
+		sleep 1
+		if [[ "$silent_action" -eq 0 ]] ; then LOG "Turning off Verification..."; fi
+		# nodes_enabled=0
+		nodes_verified=0
+		if [[ "$previousWiFi" != "" ]] ; then
+			if [[ "$silent_action" -eq 0 ]] ; then LOG "Restoring WiFi..."; fi
+			((nmcli connection up "$previousWiFi") &) > /dev/null 2>&1
+			sleep 3
+			if [[ "$silent_action" -eq 0 ]] ; then
+				if [[ "$scan_privacy" -eq 1 ]] ; then 
+					LOG green "Previous WiFi Enabled!"
+				else
+					LOG green "$previousWiFi Enabled!"
+				fi
+			fi
+			sleep 1
+		else
+			if [[ "$silent_action" -eq 0 ]] ; then LOG green "Hotpot Disabled!"; fi
+			sleep 1
+		fi
+		if [[ "$silent_action" -eq 0 ]] ; then LOG " "; fi
+	fi
+}
+
+# Handler function for individual incoming TCP node connections
+node_handle() {
+    local start_time=$(date +%s)
+    local max_duration=7
+    local buffer=""
+	
+	# Ensure the output directory exists
+	mkdir -p "$LOOT_NODES"
+
+    # Read data line by line from the network socket (stdin)
+    while IFS= read -r line; do
+        # Enforce the strict 7-second time window cap
+        local current_time=$(date +%s)
+        if (( current_time - start_time >= max_duration )); then
+            # echo "[TIMEOUT] 7 seconds reached. Closing connection." >&2
+            break
+        fi
+        # Skip completely empty payloads
+        [[ -z "$line" ]] && continue
+        # Parse string structure (Expected: NODE_ID|PAYLOAD)
+        if [[ "$line" == *"|"* ]]; then
+            # Split string safely using native bash expansion
+            local node_id="${line%%|*}"
+            local raw_payload="${line#*|}"
+            # deletes characters: ; & | ` $ ( ) < > \ ' "
+            local clean_node_id="${node_id//[;\&|\`\$()<>\\\'\"]/}"
+            # local clean_payload="${raw_payload//[;\&|\`\$()<>\\\'\"]/}"
+            # Fallback if the node ID becomes completely empty after stripping symbols
+            [[ -z "$clean_node_id" ]] && clean_node_id="unknown_node"
+            # Log to a file dedicated explicitly to this specific Node ID
+            local filename="${LOOT_NODES}/${clean_node_id}.log"
+            # local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+            # echo "$raw_payload" >> "$filename" # Direct append to node log file
+			printf "%s" "$raw_payload" >> "$filename"
+        # else
+        #    echo "[MALFORMED] Received packet without pipe delimiter: $line" >&2
+        fi
+    done
+}
+
+# node verification function
+node_verify() {
+	resp=$(CONFIRMATION_DIALOG "Verify Pine Needle(s) Connection now?
+
+Required to utilize Pine Needle(s) for Scanning.")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		while true; do
+			LOG "Starting Verification..."
+			rm -rf "${LOOT_NODES}"/* 2>/dev/null
+			sleep 1
+			# LOG "[LISTENING] Bash TCP server starting on port $nodes_port..."
+			# LOG "[INFO] Data will be streamed to individual files in '$LOOT_NODES' for 7 seconds per session."
+			# Export the handler and variable so child processes spawned by socat can access them
+			export -f node_handle 2>/dev/null
+			export LOOT_NODES 2>/dev/null
+			# socat listens on TCP and forks a new process executing node_handle for every incoming connection
+			((socat TCP4-LISTEN:$nodes_port,fork,reuseaddr EXEC:"bash -c node_handle") &) > /dev/null 2>&1
+			LOG "Please wait..."
+			LOG "Verifying Pine Needle(s) for 15 seconds..."
+			sleep 15
+			LOG "Verification Complete..."
+			killall socat 2>/dev/null
+			lootnodes=$(find "$LOOT_NODES" -maxdepth 1 -type f -name "Needle*" -print | wc -l)
+			local nodeslist=$(find "$LOOT_NODES" -maxdepth 1 -type f -name "Needle*" -print | sed 's|.*/||; s/\.log$//' | sort -n)
+			if [[ "$lootnodes" -ge 1 ]]; then
+				LOG green "$lootnodes Pine Needle(s) Found!"
+				LOG cyan "$nodeslist"
+				LOG green "Pine Needle(s) Verified!"
+				nodes_verified=1
+				LOG "Press OK to confirm..."
+				LOG " "
+				WAIT_FOR_BUTTON_PRESS A
+				sleep 0.5
+				break
+			else
+				LOG red "0 Pine Needle(s) Found!"
+				LOG red "Please check connection and re-verify!"
+				if [[ "$archCur" == "pager" ]]; then LOG "Press OK to confirm..."; fi
+				LOG " "
+				if [[ "$archCur" == "pager" ]]; then WAIT_FOR_BUTTON_PRESS A; sleep 0.5; fi
+				resp=$(CONFIRMATION_DIALOG "Re-Verify Now?")
+				if [[ "$resp" != "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					break
+				fi
+			fi
+		done
+	else
+		LOG "Skipped Verifying Pine Needle(s)..."
+		LOG " "
+	fi
+}
+
+
 
 enter_custom_oui() {
 	# LOG "enter_custom_oui"
@@ -1038,7 +1579,7 @@ main_menu() {
 	local defaultselnum="$selnum_main"
 	local text_pick_str="\"Main Menu\""
 	
-	if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$target_mac"; target_mac="${target_mac:0:2}:░░:░░:░░:░░:░░"; fi
+	if [[ "$scan_privacy" -eq 1 && -n "$target_mac" ]] ; then priv_mac_save="$target_mac"; target_mac="${target_mac:0:2}:░░:░░:░░:░░:░░"; fi
 	sorted_MENU_ITEMS=( $(for key in "${!MENU_ITEMS[@]}"; do echo "$key"; done | sort) )
 	# Record each
 	for num in "${!sorted_MENU_ITEMS[@]}"; do
@@ -1046,7 +1587,7 @@ main_menu() {
 			if [[ -n "$target_mac" ]]; then
 			  LOG green "========= Selected ${text_target_UC}: $target_mac ===="
 			else
-				LOG red "========================= No ${text_target_UC} Selected ===="
+				LOG blue "========================= No ${text_target_UC} Selected ===="
 			fi
 			LOG magenta "================================== Main Menu ===="
 		else
@@ -1082,6 +1623,7 @@ main_menu() {
 			esac
 		done
 	fi
+	if [[ -z "$resp" ]]; then resp=0; fi # LOG red "resp: $resp"
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1127,16 +1669,17 @@ sub_menu_detection() {
 	MENU_ITEMS[1]="Detect ALL"
 	MENU_ITEMS[2]="Detect ALL - Scanned/Saved ${text_target_UC}s"
 	MENU_ITEMS[3]="Detect Custom OUI/Name - Scanned/Saved ${text_target_UC}s"
-	MENU_ITEMS[4]="Axon"
-	MENU_ITEMS[5]="CC Skimmer"
-	MENU_ITEMS[6]="Flipper"
-	MENU_ITEMS[7]="Flock Devices"
-	MENU_ITEMS[8]="Meshtastic"
-	MENU_ITEMS[9]="Nest Devices"
-	MENU_ITEMS[10]="Smart Glasses"
-	MENU_ITEMS[11]="Tile"
-	MENU_ITEMS[12]="USB Kill"
-	MENU_ITEMS[13]="WiFi Pineapple"
+	MENU_ITEMS[4]="Apple AirTag (Node Scan Only)"
+	MENU_ITEMS[5]="Axon"
+	MENU_ITEMS[6]="CC Skimmer"
+	MENU_ITEMS[7]="Flipper"
+	MENU_ITEMS[8]="Flock Devices"
+	MENU_ITEMS[9]="Meshtastic / MeshCore"
+	MENU_ITEMS[10]="Nest Devices"
+	MENU_ITEMS[11]="Smart Glasses"
+	MENU_ITEMS[12]="Tile"
+	MENU_ITEMS[13]="USB Kill"
+	MENU_ITEMS[14]="WiFi Pineapple"
 	local maxarritems=$(( ${#MENU_ITEMS[@]} - 1 ))
 	local defaultselnum=1
 	local text_pick_str="\"Detection\""
@@ -1173,11 +1716,12 @@ sub_menu_detection() {
 			# echo "opt: ${MENU_ITEMS[$output]}"
 			case "$output" in
 				[1-9]) resp="${MENU_ITEMS[$output]}"; break ;;
-				0|10|11|12|13|14) resp="${MENU_ITEMS[$output]}"; break ;;
+				0|10|11|12|13|14|15) resp="${MENU_ITEMS[$output]}"; break ;;
 				*) echo "Invalid option. Please try again." ;;
 			esac
 		done
 	fi
+	if [[ -z "$resp" ]]; then resp=0; fi # LOG red "resp: $resp"
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1192,6 +1736,7 @@ sub_menu_detection() {
 		"${MENU_ITEMS[11]}") selnum=11 ;;
 		"${MENU_ITEMS[12]}") selnum=12 ;;
 		"${MENU_ITEMS[13]}") selnum=13 ;;
+		"${MENU_ITEMS[14]}") selnum=14 ;;
 		"${MENU_ITEMS[0]}") selnum=0 ;;
 		*)
 		selnum=0 # LOG "Cancel pressed or unknown"
@@ -1221,7 +1766,7 @@ sub_menu_probe() {
 		if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$target_mac"; target_mac="${target_mac:0:2}:░░:░░:░░:░░:░░"; fi
 		sorted_MENU_ITEMS=( $(for key in "${!MENU_ITEMS[@]}"; do echo "$key"; done | sort) )
 		# Record each
-	  LOG green "========= Selected ${text_target_UC}: $target_mac ===="
+		LOG green "========= Selected ${text_target_UC}: $target_mac ===="
 		for num in "${!sorted_MENU_ITEMS[@]}"; do
 			if [[ "$num" -eq 0 ]]; then
 				LOG magenta "====================================== Probe ===="
@@ -1258,6 +1803,7 @@ sub_menu_probe() {
 				esac
 			done
 		fi
+		if [[ -z "$resp" ]]; then resp=0; fi # LOG red "resp: $resp"
 		case "$resp" in
 			"${MENU_ITEMS[1]}") selnum=1 ;;
 			"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1298,7 +1844,7 @@ sub_menu_savedtargoptions() {
 	local defaultselnum=1
 	local text_pick_str="\"Manage Saved ${text_target_UC}s\""
 	
-	if [[ "$scan_privacy" -eq 1 ]] ; then priv_mac_save="$target_mac"; target_mac="${target_mac:0:2}:░░:░░:░░:░░:░░"; fi
+	if [[ "$scan_privacy" -eq 1 && -n "$target_mac" ]] ; then priv_mac_save="$target_mac"; target_mac="${target_mac:0:2}:░░:░░:░░:░░:░░"; fi
 	sorted_MENU_ITEMS=( $(for key in "${!MENU_ITEMS[@]}"; do echo "$key"; done | sort) )
 	# Record each
 	for num in "${!sorted_MENU_ITEMS[@]}"; do
@@ -1306,7 +1852,7 @@ sub_menu_savedtargoptions() {
 			if [[ -n "$target_mac" ]]; then
 			  LOG green "========= Selected ${text_target_UC}: $target_mac ===="
 			else
-				LOG red "========================= No ${text_target_UC} Selected ===="
+				LOG blue "========================= No ${text_target_UC} Selected ===="
 			fi
 			LOG magenta "======================= Manage Saved ${text_target_UC}s ===="
 		else
@@ -1342,6 +1888,7 @@ sub_menu_savedtargoptions() {
 			esac
 		done
 	fi
+	if [[ -z "$resp" ]]; then resp=0; fi # LOG red "resp: $resp"
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1370,12 +1917,13 @@ sub_menu_preferences() {
 	MENU_ITEMS[0]="Return to Main Menu"
 	MENU_ITEMS[1]="Global Settings Config"
 	MENU_ITEMS[2]="Manage Bluetooth"
-	MENU_ITEMS[3]="Sound"
-	MENU_ITEMS[4]="Debug Mode"
-	MENU_ITEMS[5]="Stealth Mode / Disable LEDS"
-	MENU_ITEMS[6]="Device ${text_hunt_UC}er Scan Filter Config"
-	MENU_ITEMS[7]="Clear History / Data / Settings"
-	MENU_ITEMS[8]="Extra"
+	MENU_ITEMS[3]="Manage GPS"
+	MENU_ITEMS[4]="Manage Pine Needles"
+	MENU_ITEMS[5]="Sound"
+	MENU_ITEMS[6]="Debug Mode"
+	MENU_ITEMS[7]="Stealth Mode / Disable LEDS"
+	MENU_ITEMS[8]="Device ${text_hunt_UC}er Scan Filter Config"
+	MENU_ITEMS[9]="Extra"
 	
 	local maxarritems=$(( ${#MENU_ITEMS[@]} - 1 ))
 	local defaultselnum=1
@@ -1412,12 +1960,13 @@ sub_menu_preferences() {
 			if [[ "$output" == "${#MENU_ITEMS[@]}" ]] ; then output=0; fi 
 			# echo "opt: ${MENU_ITEMS[$output]}"
 			case "$output" in
-				[1-${#MENU_ITEMS[@]}]) resp="${MENU_ITEMS[$output]}"; break ;;
-				0) resp="${MENU_ITEMS[$output]}"; break ;;
+				[1-9]) resp="${MENU_ITEMS[$output]}"; break ;;
+				0|10) resp="${MENU_ITEMS[$output]}"; break ;;
 				*) echo "Invalid option. Please try again." ;;
 			esac
 		done
 	fi
+	if [[ -z "$resp" ]]; then resp=0; fi # LOG red "resp: $resp"
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1427,6 +1976,7 @@ sub_menu_preferences() {
 		"${MENU_ITEMS[6]}") selnum=6 ;;
 		"${MENU_ITEMS[7]}") selnum=7 ;;
 		"${MENU_ITEMS[8]}") selnum=8 ;;
+		"${MENU_ITEMS[9]}") selnum=9 ;;
 		"${MENU_ITEMS[0]}") selnum=0 ;;
 		*)
 		selnum=0 # LOG "Cancel pressed or unknown"
@@ -1445,6 +1995,7 @@ sub_sub_menu_managebt() {
 	MENU_ITEMS[2]="Change Bluetooth MAC / Alias"
 	MENU_ITEMS[3]="Change Bluetooth Status / Discovery Setting"
 	MENU_ITEMS[4]="Retest USB Bluetooth for CSR"
+	MENU_ITEMS[5]="Select Bluetooth Interface"
 	
 	local maxarritems=$(( ${#MENU_ITEMS[@]} - 1 ))
 	local defaultselnum=1
@@ -1487,6 +2038,166 @@ sub_sub_menu_managebt() {
 			esac
 		done
 	fi
+	if [[ -z "$resp" ]]; then resp=0; fi # LOG red "resp: $resp"
+	case "$resp" in
+		"${MENU_ITEMS[1]}") selnum=1 ;;
+		"${MENU_ITEMS[2]}") selnum=2 ;;
+		"${MENU_ITEMS[3]}") selnum=3 ;;
+		"${MENU_ITEMS[4]}") selnum=4 ;;
+		"${MENU_ITEMS[5]}") selnum=5 ;;
+		"${MENU_ITEMS[0]}") selnum=0 ;;
+		*)
+		selnum=0 # LOG "Cancel pressed or unknown"
+		;;
+	esac
+	# LOG "Option $selnum selected..."
+	# LOG green "Press OK to continue..."; LOG " "; WAIT_FOR_BUTTON_PRESS A
+}
+
+# sub sub menu nodecfg
+sub_sub_menu_nodecfg() {
+	if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
+	declare -A MENU_ITEMS
+	MENU_ITEMS[0]="Return to Preferences"
+	if [[ "$nodes_enabled" -eq 1 ]] ; then
+		MENU_ITEMS[1]="Disable Pine Needle(s)"
+	else
+		MENU_ITEMS[1]="Enable Node(s)/Pine Needle(s)"
+	fi
+	MENU_ITEMS[2]="Verify Pine Needle(s)"
+	if [[ "$archCur" == "pager" ]] ; then
+		local cur_wlan0mgmt=$(uci get wireless.wlan0mgmt.disabled)
+		# TURN ON/OFF WIFI MGMT AP
+		if [[ "$cur_wlan0mgmt" -eq 1 ]] ; then
+			MENU_ITEMS[3]="Enable WiFi Mgmt AP"
+		else
+			MENU_ITEMS[3]="Disable WiFi Mgmt AP"
+		fi
+	else
+		if [[ "$hotspot_enabled" -eq 1 ]] ; then
+			MENU_ITEMS[3]="Disable Hotspot"
+		else
+			MENU_ITEMS[3]="Enable Hotspot"
+		fi
+		MENU_ITEMS[4]="Modify Hotspot SSID"
+		MENU_ITEMS[5]="Modify Hotspot Password"
+		MENU_ITEMS[6]="Select Hotspot Interface"
+		MENU_ITEMS[7]="Modify Hotspot Network"
+	fi
+	
+	local maxarritems=$(( ${#MENU_ITEMS[@]} - 1 ))
+	local defaultselnum=1
+	local text_pick_str="\"Manage Pine Needles\""
+	
+	sorted_MENU_ITEMS=( $(for key in "${!MENU_ITEMS[@]}"; do echo "$key"; done | sort) )
+	# Record each
+	for num in "${!sorted_MENU_ITEMS[@]}"; do
+		if [[ "$num" -eq 0 ]]; then
+			LOG magenta "======================== Manage Pine Needles ===="
+		else
+			item_txt="${MENU_ITEMS[$num]}"
+			LOG "${num}: $item_txt"
+			# dynamic list picker creation
+			text_pick_str="${text_pick_str} \"${item_txt}\""
+		fi
+	done
+	text_pick_str="${text_pick_str} \"${MENU_ITEMS[0]}\"" # add exit to end slot
+	text_pick_str="${text_pick_str} \"${MENU_ITEMS[$defaultselnum]}\"" # add selected to final picker slot
+	
+	LOG magenta "======================== Manage Pine Needles ===="
+	if [[ "$archCur" == "pager" ]] ; then
+		LOG "0: Return to Preferences"
+		LOG green "Press OK..."
+		LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.5
+		# can anyone recommend a better way to do this?
+		resp=$(eval "LIST_PICKER $text_pick_str")
+	else
+		LOG "${#MENU_ITEMS[@]}: Return to Preferences"
+		while true; do
+			read -e -p "Select an option [1-${#MENU_ITEMS[@]}]: " output
+			if [[ "$output" == "${#MENU_ITEMS[@]}" ]] ; then output=0; fi 
+			# echo "opt: ${MENU_ITEMS[$output]}"
+			case "$output" in
+				[1-${#MENU_ITEMS[@]}]) resp="${MENU_ITEMS[$output]}"; break ;;
+				0) resp="${MENU_ITEMS[$output]}"; break ;;
+				*) echo "Invalid option. Please try again." ;;
+			esac
+		done
+	fi
+	if [[ -z "$resp" ]]; then resp=0; fi # LOG red "resp: $resp"
+	case "$resp" in
+		"${MENU_ITEMS[1]}") selnum=1 ;;
+		"${MENU_ITEMS[2]}") selnum=2 ;;
+		"${MENU_ITEMS[3]}") selnum=3 ;;
+		"${MENU_ITEMS[4]}") selnum=4 ;;
+		"${MENU_ITEMS[5]}") selnum=5 ;;
+		"${MENU_ITEMS[6]}") selnum=6 ;;
+		"${MENU_ITEMS[7]}") selnum=7 ;;
+		"${MENU_ITEMS[0]}") selnum=0 ;;
+		*)
+		selnum=0 # LOG "Cancel pressed or unknown"
+		;;
+	esac
+	# LOG "Option $selnum selected..."
+	# LOG green "Press OK to continue..."; LOG " "; WAIT_FOR_BUTTON_PRESS A
+}
+
+# sub sub menu managegps
+sub_sub_menu_managegps() {
+	if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
+	declare -A MENU_ITEMS
+	MENU_ITEMS[0]="Return to Preferences"
+	MENU_ITEMS[1]="GPS Info"
+	MENU_ITEMS[2]="Verify GPS"
+	# if [[ "$archCur" != "pager" ]] ; then
+		MENU_ITEMS[3]="Select GPS Device"
+		MENU_ITEMS[4]="Select GPS Baud"
+	# fi
+	
+	local maxarritems=$(( ${#MENU_ITEMS[@]} - 1 ))
+	local defaultselnum=1
+	local text_pick_str="\"Manage GPS\""
+	
+	sorted_MENU_ITEMS=( $(for key in "${!MENU_ITEMS[@]}"; do echo "$key"; done | sort) )
+	# Record each
+	for num in "${!sorted_MENU_ITEMS[@]}"; do
+		if [[ "$num" -eq 0 ]]; then
+			LOG magenta "================================= Manage GPS ===="
+		else
+			item_txt="${MENU_ITEMS[$num]}"
+			LOG "${num}: $item_txt"
+			# dynamic list picker creation
+			text_pick_str="${text_pick_str} \"${item_txt}\""
+		fi
+	done
+	text_pick_str="${text_pick_str} \"${MENU_ITEMS[0]}\"" # add exit to end slot
+	text_pick_str="${text_pick_str} \"${MENU_ITEMS[$defaultselnum]}\"" # add selected to final picker slot
+	
+	LOG magenta "================================= Manage GPS ===="
+	if [[ "$archCur" == "pager" ]] ; then
+		LOG "0: Return to Preferences"
+		LOG green "Press OK..."
+		LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.5
+		# can anyone recommend a better way to do this?
+		resp=$(eval "LIST_PICKER $text_pick_str")
+	else
+		LOG "${#MENU_ITEMS[@]}: Return to Preferences"
+		while true; do
+			read -e -p "Select an option [1-${#MENU_ITEMS[@]}]: " output
+			if [[ "$output" == "${#MENU_ITEMS[@]}" ]] ; then output=0; fi 
+			# echo "opt: ${MENU_ITEMS[$output]}"
+			case "$output" in
+				[1-${#MENU_ITEMS[@]}]) resp="${MENU_ITEMS[$output]}"; break ;;
+				0) resp="${MENU_ITEMS[$output]}"; break ;;
+				*) echo "Invalid option. Please try again." ;;
+			esac
+		done
+	fi
+	if [[ -z "$resp" ]]; then resp=0; fi # LOG red "resp: $resp"
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
@@ -1501,7 +2212,6 @@ sub_sub_menu_managebt() {
 	# LOG green "Press OK to continue..."; LOG " "; WAIT_FOR_BUTTON_PRESS A
 }
 
-
 # sub sub menu extra
 sub_sub_menu_extra() {
 	if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
@@ -1512,6 +2222,7 @@ sub_sub_menu_extra() {
 	MENU_ITEMS[3]="Skip Asking to Save Results after 1st Scan"
 	MENU_ITEMS[4]="Restore A + B LEDS"
 	MENU_ITEMS[5]="Backup / Restore Config & History"
+	MENU_ITEMS[6]="Clear History / Data / Settings"
 	
 	local maxarritems=$(( ${#MENU_ITEMS[@]} - 1 ))
 	local defaultselnum=1
@@ -1554,12 +2265,14 @@ sub_sub_menu_extra() {
 			esac
 		done
 	fi
+	if [[ -z "$resp" ]]; then resp=0; fi # LOG red "resp: $resp"
 	case "$resp" in
 		"${MENU_ITEMS[1]}") selnum=1 ;;
 		"${MENU_ITEMS[2]}") selnum=2 ;;
 		"${MENU_ITEMS[3]}") selnum=3 ;;
 		"${MENU_ITEMS[4]}") selnum=4 ;;
 		"${MENU_ITEMS[5]}") selnum=5 ;;
+		"${MENU_ITEMS[6]}") selnum=6 ;;
 		"${MENU_ITEMS[0]}") selnum=0 ;;
 		*)
 		selnum=0 # LOG "Cancel pressed or unknown"
