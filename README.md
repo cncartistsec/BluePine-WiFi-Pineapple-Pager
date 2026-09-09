@@ -42,12 +42,19 @@ AArch64/ARM64/Debian Support files are not included with the pager payload from 
 Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" folder, desktop shortcut/icon included.  There are different dependencies for AArch64/ARM64/Debian which are built into the scripts dependency check: "jq" & "ieee-data" (oui info) are required, while "evtest" is not.
 
 
+# Node Support / Pine Needles
+![BluePine Node Support](images/BT-bluepine-nodes.jpg)
+
+Nodes provide extra support data for Bluetooth scans, widen Bluetooth coverage, reveal more devices per scan, and accurately detect AirTags and Meshtastic/MeshCore.  Nodes can be used with the pager or AArch64/ARM64/Debian and are currently tested running on XIAO_ESP32-C5's.  The latest Node Firmware can be found [here](https://github.com/cncartistsec/BluePine-WiFi-Pineapple-Pager/tree/main/node-firmware/).
+
+
+
 
 # Title: BluePine
 # Author: cncartist
 # Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.5
+# Version: 1.6
 # 
 # ============================================
 # Acknowledgements: 
@@ -60,9 +67,10 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 # https://github.com/judcrandall/lookout.py - (Axon OUI)
 # Fuzz_Finder - Author: OSINTI4L - (Axon OUIs)
 # https://github.com/aat440hz/CardSkimmerDetector-M5AtomS3LITE - (CC Skimmer Data)
-# https://github.com/colonelpanichacks/flock-you - (Flock OUIs + Names)
+# Flock-You - https://github.com/colonelpanichacks/flock-you - (Flock OUIs + Names)
 # StamenScan - Author: FusedStamen - https://github.com/FusedStamen/StamenScan - (MAC filter idea)
 # Smart Glasses Detector - Author: Noezsolution - https://github.com/Noezsolution/pineapple-pager-glasses-detector - (Smart Glasses Names)
+# NyanBox - Author: jbohack - https://github.com/jbohack/nyanBOX/ (Meshtastic UUID)
 # 
 # ============================================
 # Includes: 
@@ -74,7 +82,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 #  -- -- -- Filters allowed, remove MAC addresses from scan that match Multicast/Random/Locally Administered.
 #  -- -- -- Verbose logging / debugging available, GPS coordinate logging if GPS device enabled.
 #  -- Bluetooth Device Detection: 
-#  -- -- -- Axon / CC Skimmer / Flipper / Flock / Meshtastic / Nest Devices / Smart Glasses / Tiles / USB Kill / WiFi Pineapple BT Scanner.
+#  -- -- -- Apple AirTag / Axon / CC Skimmer / Flipper / Flock / Meshtastic/MeshCore / Nest Devices / Smart Glasses / Tiles / USB Kill / WiFi Pineapple BT Scanner.
 #  -- -- -- Scan the airwaves, save targets, or scan your already saved target list from Device Hunter scans.
 #  -- Bluetooth Jammer Detector & Locator: 
 #  -- -- -- Detects & Locates Bluetooth Jammers/Interference Devices within close range.
@@ -126,6 +134,11 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 #  -- -- -- Required files in "include/aarch64" folder, desktop shortcut/icon included.
 #  -- -- -- Included to convert DuckyScript commands utilized for usage on generic Debian/Bash terminals.
 #  -- -- -- Loot/Reports are stored relative to the script directory, in the 'loot' folder.
+#  -- Node Support / Pine Needles:
+#  -- -- -- Nodes provide extra support data for Bluetooth scans.
+#  -- -- -- Nodes widen Bluetooth coverage, reveal more devices per scan, and accurately detect AirTags and Meshtastic/MeshCore.
+#  -- -- -- Nodes currently tested running on XIAO_ESP32-C5's.
+#  -- -- -- Firmware can be found at: https://github.com/cncartistsec/BluePine-WiFi-Pineapple-Pager/tree/main/node-firmware/
 # 
 # ============================================
 # Notes:
@@ -150,13 +163,14 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 #  -- -- -- There are many factors in Bluetooth sensitivity; walls & windows bounce or weaken signal, desks/objects can weaken signal, orientation of the pager can matter, and signals can look weak until you get closer to the actual source/Bluetooth chip on the target device. 
 #  -- -- -- Using an external USB CSR8510 / CSR v4.0 Bluetooth Adapter, you can achieve better sensitivity and range.
 #  -- -- -- Filters: 
-#  -- -- -- -- - Filters act on the first Octet of a MAC (12:), or the MAC OUI/first 6 digits (12:34:56)
+#  -- -- -- -- - Filters act on the first Octet of a MAC (12:), the MAC OUI/first 6 digits (12:34:56), or removal of specific devices.
 #  -- -- -- -- - Adding Filters allows faster processing, removes Targets from results, and helps if you know which MACs you are searching for.
 #  -- -- -- -- - OUI: Empty OUI (00:00:00)
 #  -- -- -- -- - Basic: Multicast (Group) 01 & Locally Administered (Unicast) 02
 #  -- -- -- -- - Multi: ALL Multicast (01, 03, 05, 07, 09, 0B, 0D, 0F, 11-99 (odd), FF)
 #  -- -- -- -- - Multi: ALL Locally Administered (x2, x6, xA, xE)
 #  -- -- -- -- - Multi: ALL Random (x3, x7, xB, xF)
+#  -- -- -- -- - AirTag: Removes ALL AirTags found with Nodes (the most common device found when scanning with Nodes)
 #  -- -- -- -- - WARNING: Filters REMOVE real devices from report/display and only applies to non-targeted scans!
 #  -- Bluetooth Device Detection: 
 #  -- -- -- Please be aware of false detections!
@@ -194,6 +208,22 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 #  -- -- -- If moving between devices after collecting data, three files need to be copied/migrated.
 #  -- -- -- "SavedTargets.txt" & "LastTarget.txt" can be copied between devices for persistent Targets.
 #  -- -- -- "savedconfig.json" can be copied between devices for persistent Configuration.
+#  -- Node Support / Pine Needles:
+#  -- -- -- Nodes running on XIAO_ESP32-C5's
+#  -- -- -- -- - Nodes connect to the Pager Mgmt AP for Pager, Hotspot for Debian/AArch64
+#  -- -- -- Pager Mgmt AP + Hotspot for Debian can be enabled at: "Preferences > Manage Pine Needles"
+#  -- -- -- -- - Hotspot Interface (wlan0, wlan1, etc) can be selected at: "Preferences > Manage Pine Needles > Select Hotspot Interface"
+#  -- -- -- Node Network is setup at: "Preferences > Manage Pine Needles"
+#  -- -- -- To configure each Node:
+#  -- -- -- -- - 1. Power on and flash Node Firmware via esptool, flash download tool, or similar flashing utility.
+#  -- -- -- -- -- -- - You may have to hold boot button while connecting USB-C power and release after to enable boot/flashing mode.
+#  -- -- -- -- -- -- - Flash Params: SPI SPEED: 40MHz (or 80MHz), SPI MODE: DIO, DoNotChgBin: Checked, BAUD: 921600 (or 460800)
+#  -- -- -- -- - 2. Connect to AP "PineNeedle-Cfg", PW "MyNeedleNetwork", and go to "http://192.168.4.1" to configure the Node.
+#  -- -- -- -- -- -- - Make sure to configure one Node at a time.
+#  -- -- -- -- -- -- - They all use the same default AP Name and after configuration the credentials will be saved to the Node.
+#  -- -- -- -- - 3. Save and Node will reboot and try to connect to Node Network Configured.
+#  -- -- -- -- -- -- - If credentials fail after 45 seconds, Node will reboot into AP/Configuration mode again.
+#  -- -- -- -- -- -- - When powered on Nodes try to connect for 45 seconds and if connection fails, the Node enters AP/Configuration mode again.
 # 
 # ============================================
 #       LOGGING STRUCTURE / DATA FILES
@@ -203,6 +233,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 # Probe Reports & Logs: "/root/loot/csec/bt-bluepine/probe"
 # Scan Reports & Logs: "/root/loot/csec/bt-bluepine/scan"
 # Targets Data: "/root/loot/csec/bt-bluepine/targets"
+# Node Data: "/root/loot/csec/bt-bluepine/nodes"
 # 
 # Saved Targets File: "/root/loot/csec/bt-bluepine/targets/SavedTargets.txt"
 # Last Target File (MAC only): "/root/loot/csec/bt-bluepine/targets/LastTarget.txt"
@@ -237,6 +268,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 # ============================================
 #            Version History
 # ============================================
+# v1.6 -- GPS Management, Node Support, AirTag Detection, Fixes
 # v1.5 -- Add Nest, Smart Glasses, & Tile Detection
 # v1.4 -- AArch64/ARM64/Debian Support
 # v1.3 -- Filtering Options + Scantime Tracking
@@ -246,9 +278,7 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 # ============================================
 #          Future improvements
 # ============================================
-# change actual sound setting for system/alerts?
+# change actual sound setting for pager alerts?
 # implement sql lite db instead of current method?
-# add node support for other data source?
-# add more detections/detection based on UUID?
 # ============================================
 # 
