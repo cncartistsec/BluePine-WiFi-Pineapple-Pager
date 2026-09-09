@@ -1,8 +1,11 @@
 
+![BluePine Node Support](../images/BT-bluepine-nodes.jpg)
+
+
 # Node Support / Pine Needles:
 -- Nodes provide extra support data for Bluetooth scans.
 
--- Nodes widen Bluetooth coverage, reveal more devices per scan, and detect AirTags and Meshtastic/MeshCore.
+-- Nodes widen Bluetooth coverage, reveal more devices per scan, and accurately detect AirTags and Meshtastic/MeshCore.
 
 -- Nodes currently tested running on XIAO_ESP32-C5's.
 
