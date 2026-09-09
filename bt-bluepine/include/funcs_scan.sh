@@ -1,7 +1,7 @@
 #!/bin/bash
 # Scan Functions for BluePine
 # Author: cncartist
-# Version: 1.5
+# Version: 1.6
 # 
 # reset_bt_adapter
 # rssitxtsw_hci0
@@ -12,6 +12,7 @@
 # detect_bt_scan
 # scan_detection
 # 
+# check_bt_aplairtg
 # check_bt_axoncams
 # check_bt_ccskimmr
 # check_bt_flockcam
@@ -25,6 +26,7 @@
 # check_bt_customou
 # 
 # warn_bt_pineapps
+# warn_bt_aplairtg
 # warn_bt_axoncams
 # warn_bt_ccskimmr
 # warn_bt_flippers
@@ -47,6 +49,8 @@ reset_bt_adapter() {
 	if [[ -z "$1" ]]; then
 		devicecurrnt="$BLE_IFACE"
 	fi
+	# check hardware block on bluetooth
+	if [[ "$archCur" != "pager" ]] ; then check_rfkill "upkeep" "$devicecurrnt"; fi
 	if [[ "$scan_stealth" -eq 0 ]]; then LED WHITE; fi
 	killall hcitool 2>/dev/null
 	hciconfig "$devicecurrnt" down 2>/dev/null
@@ -182,13 +186,34 @@ reset_gpsd() {
 	if [[ "$archCur" == "pager" ]] ; then
 		/etc/init.d/gpsd reload 2>/dev/null
 		/etc/init.d/gpsd restart 2>/dev/null
+	else
+		if command -v python3 &> /dev/null; then
+			if python3 -c "import pygnssutils, serial" &> /dev/null || python3 -m pip show pygnssutils &> /dev/null || "$PYTHONVENV_FILE" -m pip show pygnssutils &> /dev/null; then 
+				gps_verify_deb
+			fi
+		fi
+		if [[ "$gps_enabled" -eq 1 ]] ; then
+			gps_collect_stop
+			gps_collect_start
+		fi
 	fi
 }
 
 
 # device hunter function
 device_hunter() {
+	# check hardware block on bluetooth
+	if [[ "$archCur" != "pager" ]] ; then check_rfkill "upkeep"; fi
 	reset_gpsd
+	# run node pickup in background
+	if [[ "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+		rm -rf "${LOOT_NODES}"/* 2>/dev/null
+		# Export the handler and variable so child processes spawned by socat can access them
+		export -f node_handle 2>/dev/null
+		export LOOT_NODES 2>/dev/null
+		# socat listens on TCP and forks a new process executing node_handle for every incoming connection
+		((socat TCP4-LISTEN:$nodes_port,fork,reuseaddr EXEC:"bash -c node_handle") &) > /dev/null 2>&1
+	fi
 	sleep 1 # give time for GPS_GET to catchup
 	
 	resp=$(CONFIRMATION_DIALOG "Modify current scan settings?")
@@ -232,6 +257,7 @@ device_hunter() {
 		local newtargcount=0
 		local newfoundcount=0
 		local scancomplete=0
+		local line_number=""
 		
 		# set on each total run
 		cancel_app=0
@@ -248,6 +274,8 @@ device_hunter() {
 		DATASTREAMBT2_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBT2.txt"
 		DATASTREAMBT3_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBT3.txt"
 		DATASTREAMBTTMP_FILE="$LOOT_SCAN/${TIMESTAMP}_DataBTTMP.txt"
+		KEYCKTMP_FILE=$(mktemp /tmp/KeyCKTMP.XXXXXX)
+		ADDRREM_FILE=$(mktemp /tmp/AddrRemTMP.XXXXXX)
 		
 		printf "═════════════════════════════════════════════════\n" >> "$REPORT_FILE"
 		printf "  Bluetooth Device %ser Scan\n" "${text_hunt_UC}" >> "$REPORT_FILE"
@@ -255,9 +283,9 @@ device_hunter() {
 		LOG blue "================================================="
 		LOG cyan "========= Bluetooth Device ${text_hunt_UC}er Scan =========="
 		
-		if [[ "$filter_multilocal" -eq 1 || "$filter_randomall" -eq 1 || "$filter_localall" -eq 1 || "$filter_multiall" -eq 1 || "$filter_emptyoui" -eq 1 ]] && [[ "$scan_custom" -eq 0 && "$scan_targeted" == "false" ]] ; then
+		if [[ "$filter_multilocal" -eq 1 || "$filter_randomall" -eq 1 || "$filter_localall" -eq 1 || "$filter_multiall" -eq 1 || "$filter_emptyoui" -eq 1 || "$filter_airtag" -eq 1 ]] && [[ "$scan_custom" -eq 0 && "$scan_targeted" == "false" ]] ; then
 			filters_enabled=1
-			if [[ "$filter_multilocal" -eq 1 && "$filter_randomall" -eq 1 && "$filter_localall" -eq 1 && "$filter_multiall" -eq 1 && "$filter_emptyoui" -eq 1 ]] ; then
+			if [[ "$filter_multilocal" -eq 1 && "$filter_randomall" -eq 1 && "$filter_localall" -eq 1 && "$filter_multiall" -eq 1 && "$filter_emptyoui" -eq 1 && "$filter_airtag" -eq 1 ]] ; then
 				filterCount=1
 				filterText="ALL Filters Enabled"
 			else
@@ -280,6 +308,10 @@ device_hunter() {
 				if [[ "$filter_randomall" -eq 1 ]] ; then
 					filterCount=$((filterCount + 1))
 					if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, ALL Rand"; else filterText="ALL Rand"; fi
+				fi
+				if [[ "$filter_airtag" -eq 1 ]] ; then
+					filterCount=$((filterCount + 1))
+					if [[ "$filterCount" -gt 1 ]] ; then filterText="${filterText}, AirTag"; else filterText="AirTag"; fi
 				fi
 			fi
 		fi
@@ -337,6 +369,13 @@ device_hunter() {
 		if [[ "$scan_debug" == "true" ]] ; then
 			LOG magenta "DEBUG Mode / Extra Logging ACTIVATED"
 		fi
+		if [[ "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+			if [[ "$scan_btle" == "true" ]]; then
+				LOG cyan "$lootnodes Pine Needle(s) Online"
+			else
+				LOG blue "$lootnodes Pine Needle(s) Online ONLY FOR BLE"
+			fi
+		fi
 		if [[ "$filterCount" -gt 0 && "$scan_custom" -eq 0 && "$scan_targeted" == "false" ]] ; then 
 			LOG blue "======================================= NOTICE =="
 			LOG "Filters WILL REMOVE Real ${text_target_UC}s from Results"
@@ -393,6 +432,8 @@ device_hunter() {
 			# unset BT_NAMES
 			# unset BT_COMPS
 			
+			# empty file
+			:> "$ADDRREM_FILE"
 			rm "$DATASTREAMBTTMP_FILE" 2>/dev/null
 			rm "$DATASTREAMBT_FILE" 2>/dev/null
 			rm "$DATASTREAMBT2_FILE" 2>/dev/null
@@ -439,6 +480,11 @@ device_hunter() {
 				LOG blue "-------------------------------------------"
 			fi
 			
+			# clean node data before scans
+			if [[ "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+				rm -rf "${LOOT_NODES}"/* 2>/dev/null
+			fi
+			
 			if [[ "$scan_btclassic" == "true" ]] ; then
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE SLOW; fi
 				# LOG red "hcitool"
@@ -451,7 +497,7 @@ device_hunter() {
 					reset_bt_adapter
 				fi
 			fi
-			
+
 			if [[ "$scan_btle" == "true" ]] ; then
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED CYAN SLOW; fi
 				# run le scan second
@@ -460,10 +506,61 @@ device_hunter() {
 				sleep ${DATA_SCAN_SECONDS}
 			fi
 			
-			#finish scans
+			# finish scans
 			killall hcitool 2>/dev/null
 			killall btmon 2>/dev/null
 			
+			# copy node data to main file if scanning for ble
+			if [[ "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 && "$scan_btle" == "true" ]]; then
+				# LOG red "COPYING NODE DATA"
+				# stop node pickup
+				killall socat 2>/dev/null
+				
+				for file in "${LOOT_NODES}"/*; do
+					if [ -f "$file" ] && [ "${file##*.}" != "tmp" ]; then
+						# clean possible incomplete entry at top of file
+						# step 1. replace carriage returns with new lines
+						# -f "$file": Ensures the script only processes files, skipping subdirectories
+						# -n: Suppresses printing by default
+						# '$p': Finds the pattern and prints everything from that line to the end ($) of the file, deleting the rest.
+						sed 's/\r/\n/g' "$file" | sed -n '/== HCI Event: LE Meta Event ==/,$p' > "${file}.tmp" && mv "${file}.tmp" "$file"
+						
+						# remove airtags from each file
+						if [[ "$filter_airtag" -eq 1 ]] ; then
+							# Use grep to find the line containing "AirTag [004C]", 1 result at time
+							line_number=$(grep -n -m 1 "AirTag \[004C\]" "$file")
+							if [[ -n "$line_number" ]] ; then 
+								while true; do 
+									line_number=$(grep -n -m 1 "AirTag \[004C\]" "$file")
+									# Extract the line number from the output of grep
+									line_number="${line_number%%:*}"
+									# echo "Line Num: $line_number"
+									# verify if completed, no more line numbers
+									if [[ -z "$line_number" || "$line_number" -eq 0 ]] ; then # echo "DONE!"
+										break
+									fi
+									# Extract Address removed
+									tmp_remove=$(sed -n "$((line_number - 1))p" "$file")
+									# log addresses to remove from main results if found
+									printf "%s\n" "${tmp_remove}" >> "$ADDRREM_FILE"
+									# Use the "sed" command to delete the line containing match and the two lines before and one line after
+									sed -i "$((line_number-2)),$((line_number+1))d" "$file"
+								done
+							fi
+						fi
+					fi
+				done
+				# sed 's/\r/\n/g' "$file" | sed -n '/== HCI Event: LE Meta Event ==/,$p' > "${file}.tmp" && mv "${file}.tmp" "$file"
+				# add extra lines to file
+				printf "\n\n\n\n" >> "$DATASTREAMBTTMP_FILE"
+				# copy node data
+				cat "$LOOT_NODES"/* >> "$DATASTREAMBTTMP_FILE" 2>/dev/null
+				# restart node pickup
+				# socat listens on TCP and forks a new process executing node_handle for every incoming connection
+				((socat TCP4-LISTEN:$nodes_port,fork,reuseaddr EXEC:"bash -c node_handle") &) > /dev/null 2>&1
+				# if [[ "$scan_debug" == "true" ]] ; then cp "$DATASTREAMBTTMP_FILE" "${LOOT_SCAN}/nodes_scan${scannumber}.txt"; fi
+			fi
+
 			if [[ "$scan_stealth" -eq 0 ]] ; then LED WHITE; fi
 			# LOG magenta "testing here"
 			
@@ -526,15 +623,19 @@ device_hunter() {
 				printf "════════════════════════════════════════════\n" >> "$REPORT_FILE"
 				# process file
 				# LOG magenta "START process file"
+				if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE; fi
 				
 				# add extra lines to file
 				printf "\n\n\n\n" >> "$DATASTREAMBTTMP_FILE"
 				
-				if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE; fi
 				# correct pineapple pager reading its own address/device via hardware info
+				# remove Link key addresses
+				sed -i -E '/Link key: [0-9a-fA-F]{32}/ {N;d};' "$DATASTREAMBTTMP_FILE"
+				# /Link key: [0-9a-fA-F]{32}/ {N; /Address: 00:00:00:00:00:00/ d;};
 				# remove these lines and two after # sed -i '/PATTERN/,+2d' "$DATASTREAMBTTMP_FILE"
 				sed -i '
 				/BR\/EDR Address:/ {d}; 
+				/ Remote OOB Data Re/ {N;N;d}; 
 				/Command: Delete Stored Li/ {N;N;d}; 
 				/Command: LE Set Random Addr/ {N;N;d}; 
 				/Command: LE Set Adverti/ {N;N;d}; 
@@ -543,10 +644,15 @@ device_hunter() {
 				/Command: Write Local Na/ {N;N;d}; 
 				/Command: Write Extended I/ {N;N;d}; 
 				/Event: Local Name Chang/ {N;N;d}; 
+				/HCI Event: Inquiry Resul/ {N;N;d}; 
+				/mand: LE Add Device To Ac/ {N;N;d}; 
+				/Event: Connectionless Per/ {N;d}; 
+				/HCI Command: Reject Conne/ {N;d}; 
 				/HCI Command: Read BD ADD/ {N;N;N;N;d}; 
 				/MGMT Event: Command Compl/ {N;N;N;N;d}; 
-				/HCI Event: Return Link Keys/,+22d;
-				' "$DATASTREAMBTTMP_FILE"
+				/Command: LE Set Extended/,+5d;
+				/HCI Event: Return Link Keys/,+5d;
+				' "$DATASTREAMBTTMP_FILE"				
 				
 				# -E extended regular expressions
 				# -i case insensitive (don't use here)
@@ -561,6 +667,15 @@ device_hunter() {
 				
 				# load addresses only into tmp file
 				grep -E "Address:" "$DATASTREAMBT_FILE" | sort -n | uniq > "$DATASTREAMBT2_FILE"
+				
+				# check if nodes working and address removal file is not empty this time around
+				if [[ "$filter_airtag" -eq 1 && -s "$ADDRREM_FILE" && "$nodes_verified" -eq 1 ]]; then
+					# loop through addresses and remove them from address file
+					# -v (Invert-Match): Instead of keeping the lines that match, this tells grep to exclude them
+					# -F (Fixed-Strings): Tells grep to treat your search terms as literal plain text rather than regex
+					# -f (File): Tells grep to read its search terms from a file (one pattern per line)
+					grep -vFf "$ADDRREM_FILE" "$DATASTREAMBT2_FILE" > temp.txt && mv temp.txt "$DATASTREAMBT2_FILE"
+				fi
 				
 				if [[ "$scan_infrepeat" -eq 1 ]] ; then check_cancel; if [[ "$cancel_app" -eq 1 ]]; then break; fi fi
 				
@@ -926,26 +1041,6 @@ device_hunter() {
 								fi
 							fi
 							
-							namecheck="${BT_NAMES[$mac]}"
-							# LOG "namecheck: ${namecheck}"
-							# if namecheck not empty
-							if [[ -n "$namecheck" ]]; then
-								# LOG "namecheck"
-								# check vs current name
-								# if name not equal current name
-								if [[ "$namecheck" != "$name" && "$name" != "Unknown" ]]; then
-									# then set name string to new text
-									BT_NAMES[$mac]="$name"
-									BT_TARGETS[$mac]="$name"
-									# LOG red "override name"
-								fi
-							else
-								if [[ -n "$name" ]]; then
-									BT_NAMES[$mac]="$name"
-									BT_TARGETS[$mac]="$name"
-								fi
-							fi
-						
 							compcheck="${BT_COMPS[$mac]}"
 							# if compcheck not empty
 							if [[ -n "$compcheck" ]]; then
@@ -957,11 +1052,37 @@ device_hunter() {
 									BT_COMPS[$mac]="$comp"
 								fi
 							else
-								if [[ -n "$comp" ]]; then
-									BT_COMPS[$mac]="$comp"
-								fi
+								BT_COMPS[$mac]="$comp"
 							fi
 							
+							# LOG red "${mac} $name $comp"
+							namecheck="${BT_NAMES[$mac]}"
+							# LOG "namecheck: ${namecheck}"
+							# if namecheck not empty
+							if [[ -n "$namecheck" ]]; then
+								# LOG blue "namecheck not empty: '$namecheck'"
+								# check vs current name
+								# if name not equal current name
+								if [[ ! -v BT_TARGETS[$mac] ]] || [[ "$namecheck" != "$name" && "$name" != "Unknown" ]]; then
+									# then set name string to new text
+									BT_NAMES[$mac]="$name"
+									BT_TARGETS[$mac]="$name"
+									# LOG blue "override name"
+									# LOG green "adding target name $name"
+								fi
+							else
+								# LOG blue "namecheck empty"
+								if [[ "$comp" != "n/a" && "$name" == "Unknown" ]]; then
+									BT_TARGETS[$mac]="$comp"
+									BT_COMPS[$mac]="$comp"
+									# LOG green "adding target comp $comp"
+								else
+									BT_NAMES[$mac]="$name"
+									BT_TARGETS[$mac]="$name"
+									# LOG green "adding target name $name"
+								fi
+							fi
+						
 							# change option back
 							shopt -u extglob
 							
@@ -1053,7 +1174,7 @@ device_hunter() {
 					rssi="${BT_RSSIS[$mac]}"
 					name="${BT_NAMES[$mac]}"
 					comp="${BT_COMPS[$mac]}"
-					if [[ "$comp" == "n/a" ]] ; then
+					if [[ "$comp" == "n/a" || "$name" == "$comp"  ]] ; then
 						comp=""
 					else
 						if [[ -z "$name" || "$name" == "Unknown" ]] ; then
@@ -1211,10 +1332,15 @@ device_hunter() {
 				LOG magenta "GPS caught in coordinate loop, resetting..."
 				show_header_extra=1
 				gps_same_count=0
-				(reset_gpsd) &
+				if [[ "$archCur" == "pager" ]] ; then
+					(reset_gpsd) &
+				else
+					reset_gpsd
+				fi
 				# reset for GPS_GET takes 10 seconds, prevent lost gps on reset
 				# LOG red "RESETTING GPSD 10 seconds..."
 				sleep 10
+				gps_disptxt=' NoGPS'
 			fi
 			
 			if [[ "$show_header_extra" -eq 1 ]] ; then
@@ -1258,11 +1384,20 @@ device_hunter() {
 			
 		done
 		
-		
+		# stop node pickup and kill other processes
+		if [[ "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+			killall socat 2>/dev/null
+		fi
 		killall hcitool 2>/dev/null
 		killall btmon 2>/dev/null
-		if [[ "$archCur" == "pager" ]] ; then killall evtest 2>/dev/null; fi
-		rm "$KEYCKTMP_FILE" 2>/dev/null
+		if [[ "$archCur" == "pager" ]] ; then 
+			killall evtest 2>/dev/null
+			rm "$KEYCKTMP_FILE" 2>/dev/null
+			rm "$ADDRREM_FILE" 2>/dev/null
+		else
+			sudo rm -f "$KEYCKTMP_FILE" 2>/dev/null
+			sudo rm -f "$ADDRREM_FILE" 2>/dev/null
+		fi
 		
 		LOG cyan "================= Scan Results =================="
 		if [[ "$totalruntime" -gt 60 ]] ; then 
@@ -1273,7 +1408,10 @@ device_hunter() {
 		fi
 		newtargcount="${#BT_TARGETS[@]}"		
 		newfoundcount=$((newtargcount-origtargcount))
-			
+		# LOG "origtargcount: $origtargcount"
+		# LOG "newtargcount: $newtargcount"
+		# LOG "newfoundcount: $newfoundcount"
+		
 		if [[ "$totalruntime" -ge 86400 ]] ; then
 			days=$((totalruntime/86400)); hrs=$((totalruntime%86400/3600)); mins=$((totalruntime%3600/60))
 			if [[ "$totalruntime" -ge 172800 ]] ; then
@@ -1312,6 +1450,7 @@ device_hunter() {
 				LOG "${newfoundcount} Unique ${text_target_UC}(s) Found in ${scannumberShow} Scan!"
 			fi
 		else
+			newfoundcount=0
 			LOG red "No Unique ${text_target_UC}s Found in ${scannumberShow} Scan(s)"
 		fi
 		printf "%s Unique Targets Found in %s Scan(s)\n" "${newfoundcount}" "${scannumberShow}" >> "$REPORT_FILE"
@@ -1370,6 +1509,11 @@ detect_bt_scan() {
 	(timeout --signal=SIGINT "$((DATA_SCAN_SECONDS+2))s" btmon &> "$DATASTREAMBTTMP_FILE") &
 	sleep 1
 	# LOG red "hcitool"
+
+	# clean node data before scans
+	if [[ "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+		rm -rf "${LOOT_NODES}"/* 2>/dev/null
+	fi
 	
 	if [[ "$scantype" == "bcl" ]] ; then 
 		# (timeout --signal=SIGINT "${DATA_SCAN_SECONDS}s" hcitool -i "$BLE_IFACE" scan) &
@@ -1390,6 +1534,32 @@ detect_bt_scan() {
 	killall hcitool 2>/dev/null
 	killall btmon 2>/dev/null
 	
+	# copy node data to main file if scanning for ble
+	if [[ "$scantype" == "ble" && "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+		# LOG red "COPYING NODE DATA"
+		# stop node pickup
+		killall socat 2>/dev/null
+		# clean possible incomplete entry at top of file
+		# step 1. replace carriage returns with new lines
+		# -f "$file": Ensures the script only processes files, skipping subdirectories
+		# -n: Suppresses printing by default
+		# '$p': Finds the pattern and prints everything from that line to the end ($) of the file, deleting the rest.
+		for file in "${LOOT_NODES}"/*; do
+			if [ -f "$file" ] && [ "${file##*.}" != "tmp" ]; then
+				sed 's/\r/\n/g' "$file" | sed -n '/== HCI Event: LE Meta Event ==/,$p' > "${file}.tmp" && mv "${file}.tmp" "$file"
+			fi
+		done
+		# sed 's/\r/\n/g' "$file" | sed -n '/== HCI Event: LE Meta Event ==/,$p' > "${file}.tmp" && mv "${file}.tmp" "$file"
+		# add extra lines to file
+		printf "\n\n\n\n" >> "$DATASTREAMBTTMP_FILE"
+		# copy node data
+		cat "$LOOT_NODES"/* >> "$DATASTREAMBTTMP_FILE" 2>/dev/null
+		# restart node pickup
+		# socat listens on TCP and forks a new process executing node_handle for every incoming connection
+		((socat TCP4-LISTEN:$nodes_port,fork,reuseaddr EXEC:"bash -c node_handle") &) > /dev/null 2>&1
+		# if [[ "$scan_debug" == "true" ]] ; then cp "$DATASTREAMBTTMP_FILE" "${LOOT_SCAN}/nodes_scan${scannumber}.txt"; fi
+	fi
+	
 	if [[ "$scan_stealth" -eq 0 ]] ; then LED YELLOW; fi
 	# LOG magenta "testing here"
 		
@@ -1397,13 +1567,18 @@ detect_bt_scan() {
 		# process file
 		# LOG magenta "START process file"
 		if [[ "$scan_stealth" -eq 0 ]] ; then LED BLUE; fi
+		
 		# add extra lines to file
 		printf "\n\n\n\n" >> "$DATASTREAMBTTMP_FILE"
 		
 		# correct pineapple pager reading its own address/device via hardware info
+		# remove Link key addresses
+		sed -i -E '/Link key: [0-9a-fA-F]{32}/ {N;d};' "$DATASTREAMBTTMP_FILE"
+		# /Link key: [0-9a-fA-F]{32}/ {N; /Address: 00:00:00:00:00:00/ d;};
 		# remove these lines and two after # sed -i '/PATTERN/,+2d' "$DATASTREAMBTTMP_FILE"
 		sed -i '
 		/BR\/EDR Address:/ {d}; 
+		/ Remote OOB Data Re/ {N;N;d}; 
 		/Command: Delete Stored Li/ {N;N;d}; 
 		/Command: LE Set Random Addr/ {N;N;d}; 
 		/Command: LE Set Adverti/ {N;N;d}; 
@@ -1412,10 +1587,15 @@ detect_bt_scan() {
 		/Command: Write Local Na/ {N;N;d}; 
 		/Command: Write Extended I/ {N;N;d}; 
 		/Event: Local Name Chang/ {N;N;d}; 
+		/HCI Event: Inquiry Resul/ {N;N;d}; 
+		/mand: LE Add Device To Ac/ {N;N;d}; 
+		/Event: Connectionless Per/ {N;d}; 
+		/HCI Command: Reject Conne/ {N;d}; 
 		/HCI Command: Read BD ADD/ {N;N;N;N;d}; 
 		/MGMT Event: Command Compl/ {N;N;N;N;d}; 
-		/HCI Event: Return Link Keys/,+22d;
-		' "$DATASTREAMBTTMP_FILE"
+		/Command: LE Set Extended/,+5d;
+		/HCI Event: Return Link Keys/,+5d;
+		' "$DATASTREAMBTTMP_FILE"	
 		
 		# -E extended regular expressions
 		# -i case insensitive (don't use here)
@@ -1541,6 +1721,22 @@ detect_bt_scan() {
 						comp="n/a"
 					fi
 					# LOG "comp2: ${comp}"
+									
+					compcheck="${BT_COMPS[$mac]}"
+					# if compcheck not empty
+					if [[ -n "$compcheck" ]]; then
+						# LOG "compcheck"
+						# check vs current comp
+						# if comp not equal current company or service data
+						if [[ "$compcheck" != "$comp" && "$comp" != "n/a" ]]; then
+							# then set comp string to new text
+							BT_COMPS[$mac]="$comp"
+						fi
+					else
+						if [[ -n "$comp" ]]; then
+							BT_COMPS[$mac]="$comp"
+						fi
+					fi
 					
 					namecheck="${BT_NAMES[$mac]}"
 					# LOG "namecheck: ${namecheck}"
@@ -1557,22 +1753,6 @@ detect_bt_scan() {
 					else
 						if [[ -n "$name" ]]; then
 							BT_NAMES[$mac]="$name"
-						fi
-					fi
-				
-					compcheck="${BT_COMPS[$mac]}"
-					# if compcheck not empty
-					if [[ -n "$compcheck" ]]; then
-						# LOG "compcheck"
-						# check vs current comp
-						# if comp not equal current company or service data
-						if [[ "$compcheck" != "$comp" && "$comp" != "n/a" ]]; then
-							# then set comp string to new text
-							BT_COMPS[$mac]="$comp"
-						fi
-					else
-						if [[ -n "$comp" ]]; then
-							BT_COMPS[$mac]="$comp"
 						fi
 					fi
 					
@@ -1601,7 +1781,7 @@ detect_bt_scan() {
 			mac="$key"
 			name="${BT_NAMES[$mac]}"
 			comp="${BT_COMPS[$mac]}"
-			if [[ "$comp" == "n/a" ]] ; then
+			if [[ "$comp" == "n/a" || "$name" == "$comp"  ]] ; then
 				comp=""
 			else
 				if [[ -z "$name" || "$name" == "Unknown" ]] ; then
@@ -1615,6 +1795,7 @@ detect_bt_scan() {
 				if [[ "$scan_BT_PINEAPPS" == "true" ]] ; then check_bt_pineapps "$mac" "${name}${comp}"; fi
 				if [[ "$scan_BT_SMRTGLAS" == "true" ]] ; then check_bt_smrtglas "$mac" "${name}${comp}"; fi
 			else
+				if [[ "$scan_BT_APLAIRTG" == "true" ]] ; then check_bt_aplairtg "$mac" "${name}${comp}"; fi
 				if [[ "$scan_BT_AXONCAMS" == "true" ]] ; then check_bt_axoncams "$mac" "${name}${comp}"; fi
 				if [[ "$scan_BT_CCSKIMMR" == "true" ]] ; then check_bt_ccskimmr "$mac" "${name}${comp}"; fi
 				if [[ "$scan_BT_FLIPPERS" == "true" ]] ; then check_bt_flippers "$mac" "${name}${comp}"; fi
@@ -1652,6 +1833,8 @@ detect_bt_scan() {
 
 # detection scans
 scan_detection() {
+	# check hardware block on bluetooth
+	if [[ "$archCur" != "pager" ]] ; then check_rfkill "upkeep"; fi
 	reset_gpsd
 	sleep 3 # give time for GPS_GET to catchup
 	
@@ -1672,6 +1855,20 @@ scan_detection() {
 	# set on each total run
 	gpspos_last=""
 	
+	if [[ "$scan_BT_APLAIRTG" == "true" ]] ; then
+		searchCount=$((searchCount + 1))
+		btle_searchCount=$((btle_searchCount + 1))
+		if [[ "$searchCount" -gt 1 ]] ; then
+			searchText="${searchText} / AirTag"
+		else
+			searchText="AirTag"
+		fi
+		if [[ "$btle_searchCount" -gt 1 ]] ; then
+			btle_searchText="${btle_searchText} / AirTag"
+		else
+			btle_searchText="AirTag"
+		fi
+	fi
 	if [[ "$scan_BT_AXONCAMS" == "true" ]] ; then
 		searchCount=$((searchCount + 1))
 		btle_searchCount=$((btle_searchCount + 1))
@@ -1732,14 +1929,14 @@ scan_detection() {
 		searchCount=$((searchCount + 1))
 		btle_searchCount=$((btle_searchCount + 1))
 		if [[ "$searchCount" -gt 1 ]] ; then
-			searchText="${searchText} / Meshtastic"
+			searchText="${searchText} / Meshtastic/MeshCore"
 		else
-			searchText="Meshtastic"
+			searchText="Meshtastic/MeshCore"
 		fi
 		if [[ "$btle_searchCount" -gt 1 ]] ; then
-			btle_searchText="${btle_searchText} / Meshtastic"
+			btle_searchText="${btle_searchText} / Meshtastic/MeshCore"
 		else
-			btle_searchText="Meshtastic"
+			btle_searchText="Meshtastic/MeshCore"
 		fi
 	fi
 	if [[ "$scan_BT_NESTCAMS" == "true" ]] ; then
@@ -1818,9 +2015,18 @@ scan_detection() {
 			btcl_searchText="WiFi Pineapple"
 		fi
 	fi
+	# run node pickup in background
+	if [[ "$btle_searchCount" -gt 1 && "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+		rm -rf "${LOOT_NODES}"/* 2>/dev/null
+		# Export the handler and variable so child processes spawned by socat can access them
+		export -f node_handle 2>/dev/null
+		export LOOT_NODES 2>/dev/null
+		# socat listens on TCP and forks a new process executing node_handle for every incoming connection
+		((socat TCP4-LISTEN:$nodes_port,fork,reuseaddr EXEC:"bash -c node_handle") &) > /dev/null 2>&1
+	fi
+	
 	# Check for BT device with specified characteristics
 	# Confirm Scan
-	
 	resp=$(CONFIRMATION_DIALOG "Modify current scan settings?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]]; then
 		scantime_config
@@ -1854,6 +2060,13 @@ scan_detection() {
 		if [[ "$scan_debug" == "true" ]] ; then
 			LOG magenta "DEBUG Mode / Extra Logging ACTIVATED"
 		fi
+		if [[ "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+			if [[ "$btle_searchCount" -gt 0 ]] ; then
+				LOG cyan "$lootnodes Pine Needle(s) Online"
+			else
+				LOG blue "$lootnodes Pine Needle(s) Online ONLY FOR BLE"
+			fi
+		fi
 		sleep 2 # give time for GPS_GET to catchup
 		
 		while true; do
@@ -1861,6 +2074,7 @@ scan_detection() {
 			detections=0
 			scannumber=$((scannumber + 1))
 			
+			BT_APLAIRTG=()
 			BT_AXONCAMS=()
 			BT_CCSKIMMR=()
 			BT_FLIPPERS=()
@@ -1898,7 +2112,7 @@ scan_detection() {
 				sleep 1
 			fi
 			
-			if [[ "$scan_BT_AXONCAMS" == "true" || "$scan_BT_CCSKIMMR" == "true" || "$scan_BT_FLIPPERS" == "true" || "$scan_BT_FLOCKCAM" == "true" || "$scan_BT_MESHTAST" == "true" || "$scan_BT_NESTCAMS" == "true" || "$scan_BT_SMRTGLAS" == "true" || "$scan_BT_TILETAGS" == "true" || "$scan_BT_USBKILLS" == "true" ]] ; then
+			if [[ "$scan_BT_APLAIRTG" == "true" || "$scan_BT_AXONCAMS" == "true" || "$scan_BT_CCSKIMMR" == "true" || "$scan_BT_FLIPPERS" == "true" || "$scan_BT_FLOCKCAM" == "true" || "$scan_BT_MESHTAST" == "true" || "$scan_BT_NESTCAMS" == "true" || "$scan_BT_SMRTGLAS" == "true" || "$scan_BT_TILETAGS" == "true" || "$scan_BT_USBKILLS" == "true" ]] ; then
 				if [[ "$scan_stealth" -eq 0 ]] ; then LED CYAN SLOW; fi
 				LOG cyan "Scanning for ${btle_searchText} BT Signals..."
 				LOG cyan "Scanning BLE for ${DATA_SCAN_SECONDS}s..."
@@ -1912,6 +2126,11 @@ scan_detection() {
 			
 			if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
 			
+			if [[ "$scan_BT_APLAIRTG" == "true" ]] ; then
+				warn_bt_aplairtg
+				LOG " "
+				sleep 0.25
+			fi
 			if [[ "$scan_BT_AXONCAMS" == "true" ]] ; then
 				warn_bt_axoncams
 				LOG " "
@@ -1973,23 +2192,29 @@ scan_detection() {
 			total_scans=$((total_scans + 1))
 			# LOG blue "-------------------------------------------"
 			# LOG " "
-			LOG green "Press OK to continue..."
-			LOG " "
-			WAIT_FOR_BUTTON_PRESS A
-			
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG green "Press OK to continue..."
+				LOG " "
+				WAIT_FOR_BUTTON_PRESS A
+			fi			
 			rm "$DATASTREAMBT_FILE" 2>/dev/null
 			rm "$DATASTREAMBT2_FILE" 2>/dev/null
 			rm "$DATASTREAMBT3_FILE" 2>/dev/null
 			rm "$DATASTREAMBTTMP_FILE" 2>/dev/null
 			rm "$DATASTREAMBTLETMP_FILE" 2>/dev/null
 			# Confirm Scan
-			resp=$(CONFIRMATION_DIALOG "Scan again?")
-			if [[ "$resp" != "$DUCKYSCRIPT_USER_CONFIRMED" ]]; then
+			resp=$(CONFIRMATION_DIALOG "End scan(s)?")
+			if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]]; then
 				break
 			fi
 			LOG "Scanning again..."
 			printf "Scanning again...\n" >> "$REPORT_DETECT_FILE"
 		done
+		
+		# stop node pickup
+		if [[ "$nodes_verified" -eq 1 && "$nodes_enabled" -eq 1 ]]; then
+			killall socat 2>/dev/null
+		fi
 		
 		if [[ "$totalruntime" -gt 60 ]] ; then 
 			totalmin=$((totalruntime/60)); secs=$((totalruntime%60))
@@ -2043,15 +2268,35 @@ scan_detection() {
 }
 
 
-
-# AirTag Manufacturer ID
-# https://github.com/7ENSOR/AirTagTag/tree/main/
-# Check for AirTag using manufacturer data
-# if (advertisedDevice.haveManufacturerData()) {
-# std::string manufacturerData = advertisedDevice.getManufacturerData();
-# if (manufacturerData.size() > 2 && manufacturerData[0] == 0x4C && manufacturerData[1] == 0x00) {
-# Manufacturer ID: AirTags use Apples manufacturer ID (0x004C) within their advertising packets.
-
+# AirTag check (node scan only)
+check_bt_aplairtg() {
+	local mac="$1"
+	local name="$2"
+	
+	# AirTag found	
+	if [[ "$name" == *"AirTag [004C]"* ]] ; then
+		# check if key exists, even if empty
+		if [[ -v BT_APLAIRTG[$mac] ]]; then
+			# only update if name not empty
+			if [[ -n "$name" && "$name" != "Unknown" ]] ; then
+				BT_APLAIRTG[$mac]="$name"
+			fi
+		else
+			BT_APLAIRTG[$mac]="$name"
+		fi
+		if [[ "$scan_detect_scanned" -eq 0 && "$scan_custom" -eq 0 ]] ; then
+			if [[ -v BT_TARGETS[$mac] ]]; then
+				# only update if name not empty
+				if [[ -n "$name" && "$name" != "Unknown" ]] ; then
+					BT_TARGETS[$mac]="${name}"
+				fi
+			else
+				BT_TARGETS[$mac]="${name}"
+			fi
+		fi
+		# LOG "AIRTAG exists!"
+	fi
+}
 
 # axoncam check
 check_bt_axoncams() {
@@ -2201,17 +2446,6 @@ check_bt_flockcam() {
 	if [[ "$name" == *"FS Ext Battery"* || "$name" == *"Penguin"* || "$name" == *"Flock"* || "$name" == *"Pigvision"*  || "$name" == *"XUNTONG"* ]] ; then
 		namefound=1
 	fi
-	
-	# FLOCK Manufacturer ID
-	# BLE Manufacturer Company IDs
-	# Source: wgreenberg/flock-you - XUNTONG ID associated with Flock Safety devices
-	# static const uint16_t ble_manufacturer_ids[] = {
-	#     0x09C8   // XUNTONG
-	# };
-	# Segment 3: 03 03 C8 09
-	# Length: 0x03 → 3 bytes follow
-	# AD Type: 0x03 → Complete List of 16-bit Service UUIDs
-	# Value: C8 09 → UUID 0x09C8 (little-endian!)
 
 	if [[ -v FLOCKCAM_OUIS["$target_oui"] || "$namefound" -eq 1 ]]; then
 		# check if key exists, even if empty
@@ -2274,27 +2508,13 @@ check_bt_flippers() {
 	fi
 }
 
-# meshtastic check
+# meshtastic/MeshCore check
 check_bt_meshtast() {
 	local mac="$1"
 	local name="$2"
 		
-	# Meshtastic default name prefix
-	local MESHTAST_NAME="meshtastic"
-	
-	# Meshtastic SERVICE_UUID
-	# https://github.com/jbohack/nyanBOX/blob/main/VScode%20Platformio/src/meshcore_detector.cpp
-	# const uint8_t MESHCORE_SERVICE_UUID[16] = {
-	# 	0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
-	# 	0x93, 0xF3, 0xA3, 0xB5, 0x01, 0x00, 0x40, 0x6E
-	# };
-	# https://github.com/jbohack/nyanBOX/blob/main/VScode%20Platformio/src/meshtastic_detector.cpp
-	# const uint8_t MESHTASTIC_SERVICE_UUID[16] = {
-	# 	0xFD, 0xEA, 0x73, 0xE2, 0xCA, 0x5D, 0xA8, 0x9F,
-	# 	0x1F, 0x46, 0xA8, 0x15, 0x18, 0xB2, 0xA1, 0x6B
-	# };
-	
-	if [[ "$name" == *"$MESHTAST_NAME"* ]] ; then
+	# Meshtastic/meshcore default name prefix	
+	if [[ "$name" == *"meshtastic"* || "$name" == *"meshcore"* ]] ; then
 		# check if key exists, even if empty
 		if [[ -v BT_MESHTAST[$mac] ]]; then
 			# only update if name not empty
@@ -2384,9 +2604,11 @@ check_bt_smrtglas() {
 	SMRTGLAS_OUIS["24:0A:C4"]="y"
 	SMRTGLAS_OUIS["84:F3:EB"]="y"
 	SMRTGLAS_OUIS["78:21:84"]="y"
+	# RayNeo Air 2 AR Glasses
+	SMRTGLAS_OUIS["94:E9:6A"]="y"
 
 	# CHECK Smart Glasses NAMES
-	if [[ "$name" == *"Ray-Ban"* || "$name" == *"RayBan"* || "$name" == *"Meta"* || "$name" == *"Spectacles"* || "$name" == *"Bose Frame"* || "$name" == *"Bose Corp"* || "$name" == *"Google Glass"* || "$name" == *"Vuzix"* || "$name" == *"XREAL"* || "$name" == *"Nreal"* || "$name" == *"Oakley"* || "$name" == *"Luxottica"* || "$name" == *"Snap Inc"* || "$name" == *"Snapchat"* ]] ; then
+	if [[ "$name" == *"Ray-Ban"* || "$name" == *"RayBan"* || "$name" == *"RayNeo"* || "$name" == *"Meta"* || "$name" == *"Spectacles"* || "$name" == *"Bose Frame"* || "$name" == *"Bose Corp"* || "$name" == *"Google Glass"* || "$name" == *"Vuzix"* || "$name" == *"XREAL"* || "$name" == *"Nreal"* || "$name" == *"Oakley"* || "$name" == *"Luxottica"* || "$name" == *"Snap Inc"* || "$name" == *"Snapchat"* ]] ; then
 		namefound=1
 	fi
 	
@@ -2448,11 +2670,13 @@ check_bt_usbkills() {
 	local name="$2"
 	local target_oui="${mac:0:8}"
 	
-	local USBKILL_OUI="F1:9E:08"
+	# usbkill uses randomized macs
+	# local USBKILL_OUI="xx:xx:xx"
 	local USBKILL_NAME="usbkill"
 	
 	# Add hits, devices that include string "usbkill" in name or hardcoded OUI in MAC
-	if [[ "$target_oui" == "$USBKILL_OUI" || "$name" == *"$USBKILL_NAME"* ]] ; then
+	# if [[ "$target_oui" == "$USBKILL_OUI" || "$name" == *"$USBKILL_NAME"* ]] ; then
+	if [[ "$name" == *"$USBKILL_NAME"* ]] ; then
 		# check if key exists, even if empty
 		if [[ -v BT_USBKILLS[$mac] ]]; then
 			# only update if name not empty
@@ -2599,6 +2823,36 @@ warn_bt_pineapps() {
 	fi
 }
 
+# airtag warn
+warn_bt_aplairtg() {
+	if [[ ${#BT_APLAIRTG[@]} -gt 0 ]]; then
+		curcount=1; totcount="${#BT_APLAIRTG[@]}"
+		LOG red "-------------------------------------------------"
+		LOG red "WARNING: Found ${totcount} potential AirTag BT Device(s)"
+		printf "\n" >> "$REPORT_DETECT_FILE"
+		printf "WARNING: Found %s potential AirTag BT Device(s).\n" "${totcount}" >> "$REPORT_DETECT_FILE"
+		LOG " "
+		# Record each BT AirTag device found
+		for mac in "${!BT_APLAIRTG[@]}"; do
+			name="${BT_APLAIRTG[$mac]}"
+			printf "Potential AirTag Device:\nBT Name: %s\nBT MAC: %s\n" "${name}" "${mac}" >> "$REPORT_DETECT_FILE"
+			if [[ "$scan_privacy" -eq 1 ]] ; then mac="${mac:0:2}:░░:░░:░░:░░:░░"; name="$priv_name_txt"; fi
+			LOG red "Potential AirTag Device:\nBT Name: $name\nBT MAC: $mac"
+			detections=$((detections + 1))
+			total_detected=$((total_detected + 1))
+			if [[ "$curcount" -lt "$totcount" ]] ; then
+				LOG " "
+			fi
+			curcount=$((curcount + 1))
+		done
+		LOG red "-------------------------------------------------"
+	else 
+		LOG green "No obvious AirTag BT Devices detected."
+		printf "\n" >> "$REPORT_DETECT_FILE"
+		printf "No obvious AirTag BT Devices detected.\n" >> "$REPORT_DETECT_FILE"
+	fi
+}
+
 # axoncam warn
 warn_bt_axoncams() {
 	if [[ ${#BT_AXONCAMS[@]} -gt 0 ]]; then
@@ -2719,21 +2973,21 @@ warn_bt_flockcam() {
 	fi
 }
 
-# meshtastic warn
+# meshtastic/MeshCore warn
 warn_bt_meshtast() {
 	if [[ ${#BT_MESHTAST[@]} -gt 0 ]]; then
 		curcount=1; totcount="${#BT_MESHTAST[@]}"
 		LOG red "-------------------------------------------------"
-		LOG red "WARNING: Found ${totcount} potential Meshtastic BT Device(s)"
+		LOG red "WARNING: Found ${totcount} potential Meshtastic/MeshCore BT Device(s)"
 		printf "\n" >> "$REPORT_DETECT_FILE"
-		printf "WARNING: Found %s potential Meshtastic BT Device(s).\n" "${totcount}" >> "$REPORT_DETECT_FILE"
+		printf "WARNING: Found %s potential Meshtastic/MeshCore BT Device(s).\n" "${totcount}" >> "$REPORT_DETECT_FILE"
 		LOG " "
 		# Record each BT Meshtastic device found
 		for mac in "${!BT_MESHTAST[@]}"; do
 			name="${BT_MESHTAST[$mac]}"
-			printf "Potential Meshtastic Device:\nBT Name: %s\nBT MAC: %s\n" "${name}" "${mac}" >> "$REPORT_DETECT_FILE"
+			printf "Potential Meshtastic/MeshCore Device:\nBT Name: %s\nBT MAC: %s\n" "${name}" "${mac}" >> "$REPORT_DETECT_FILE"
 			if [[ "$scan_privacy" -eq 1 ]] ; then mac="${mac:0:2}:░░:░░:░░:░░:░░"; name="$priv_name_txt"; fi
-			LOG red "Potential Meshtastic Device:\nBT Name: $name\nBT MAC: $mac"
+			LOG red "Potential Meshtastic/MeshCore Device:\nBT Name: $name\nBT MAC: $mac"
 			detections=$((detections + 1))
 			total_detected=$((total_detected + 1))
 			if [[ "$curcount" -lt "$totcount" ]] ; then
@@ -2743,9 +2997,9 @@ warn_bt_meshtast() {
 		done
 		LOG red "-------------------------------------------------"
 	else 
-		LOG green "No obvious Meshtastic BT Devices detected."
+		LOG green "No obvious Meshtastic/MeshCore BT Devices detected."
 		printf "\n" >> "$REPORT_DETECT_FILE"
-		printf "No obvious Meshtastic BT Devices detected.\n" >> "$REPORT_DETECT_FILE"
+		printf "No obvious Meshtastic/MeshCore BT Devices detected.\n" >> "$REPORT_DETECT_FILE"
 	fi
 }
 
@@ -2899,7 +3153,9 @@ warn_bt_customou() {
 	fi
 }
 
+
 scan_detect_from_scanned() {
+	local total_BT_APLAIRTG=0
 	local total_BT_AXONCAMS=0
 	local total_BT_CCSKIMMR=0
 	local total_BT_FLIPPERS=0
@@ -2947,6 +3203,7 @@ scan_detect_from_scanned() {
 		if [[ "$scan_stealth" -eq 0 ]] ; then LED MAGENTA; fi
 		
 		detections=0
+		BT_APLAIRTG=()
 		BT_AXONCAMS=()
 		BT_CCSKIMMR=()
 		BT_FLIPPERS=()
@@ -3029,7 +3286,7 @@ scan_detect_from_scanned() {
 					targetlist_name="${BT_TARGETS[$mac]}"
 				fi
 				targetlist_comp="${BT_COMPS[$mac]}"
-				if [[ "$targetlist_comp" == "n/a" ]] ; then
+				if [[ "$targetlist_comp" == "n/a" || "$targetlist_name" == "$targetlist_comp" ]] ; then
 					targetlist_comp=""
 				else
 					if [[ -z "$targetlist_name" || "$targetlist_name" == "Unknown" ]] ; then
@@ -3049,6 +3306,7 @@ scan_detect_from_scanned() {
 					# LOG green "CHECKING..."
 					check_bt_customou "$mac" "$NEW_TARGET_MAC_NAME"
 				else
+					check_bt_aplairtg "$mac" "$NEW_TARGET_MAC_NAME"
 					check_bt_axoncams "$mac" "$NEW_TARGET_MAC_NAME"
 					check_bt_ccskimmr "$mac" "$NEW_TARGET_MAC_NAME"
 					check_bt_flippers "$mac" "$NEW_TARGET_MAC_NAME"
@@ -3073,6 +3331,7 @@ scan_detect_from_scanned() {
 			else
 				LOG "Time to scan ${#BT_TARGETS[@]} scanned ${text_target_UC}(s): ${runtime}s"
 			fi
+			total_BT_APLAIRTG=${#BT_APLAIRTG[@]}
 			total_BT_AXONCAMS=${#BT_AXONCAMS[@]}
 			total_BT_CCSKIMMR=${#BT_CCSKIMMR[@]}
 			total_BT_FLIPPERS=${#BT_FLIPPERS[@]}
@@ -3085,7 +3344,7 @@ scan_detect_from_scanned() {
 			total_BT_PINEAPPS=${#BT_PINEAPPS[@]}
 			total_BT_CUSTOMOU=${#BT_CUSTOMOU[@]}
 
-			total_found_scans=$((total_BT_AXONCAMS + total_BT_CCSKIMMR + total_BT_FLIPPERS + total_BT_FLOCKCAM + total_BT_MESHTAST + total_BT_NESTCAMS + total_BT_SMRTGLAS + total_BT_TILETAGS + total_BT_USBKILLS + total_BT_PINEAPPS + total_BT_CUSTOMOU))
+			total_found_scans=$((total_BT_APLAIRTG + total_BT_AXONCAMS + total_BT_CCSKIMMR + total_BT_FLIPPERS + total_BT_FLOCKCAM + total_BT_MESHTAST + total_BT_NESTCAMS + total_BT_SMRTGLAS + total_BT_TILETAGS + total_BT_USBKILLS + total_BT_PINEAPPS + total_BT_CUSTOMOU))
 			if [[ "$total_found_scans" -gt 0 ]] ; then
 				LOG red "Found ${total_found_scans} suspect scanned ${text_target_LC}(s)..."
 				printf "Found %s suspect scanned Target(s)...\n" "${total_found_scans}" >> "$REPORT_DETECT_FILE"
@@ -3104,6 +3363,7 @@ scan_detect_from_scanned() {
 		LOG " "
 		
 		# reset totals for checking where results found
+		total_BT_APLAIRTG=0
 		total_BT_AXONCAMS=0
 		total_BT_CCSKIMMR=0
 		total_BT_FLIPPERS=0
@@ -3158,6 +3418,7 @@ scan_detect_from_scanned() {
 						# LOG green "CHECKING..."
 						check_bt_customou "$mac" "$name"
 					else
+						check_bt_aplairtg "$mac" "$name"
 						check_bt_axoncams "$mac" "$name"
 						check_bt_ccskimmr "$mac" "$name"
 						check_bt_flippers "$mac" "$name"
@@ -3183,6 +3444,7 @@ scan_detect_from_scanned() {
 			else
 				LOG "Time to scan ${linecount} Saved ${text_target_UC}(s): ${runtime}s"
 			fi
+			total_BT_APLAIRTG=${#BT_APLAIRTG[@]}
 			total_BT_AXONCAMS=${#BT_AXONCAMS[@]}
 			total_BT_CCSKIMMR=${#BT_CCSKIMMR[@]}
 			total_BT_FLIPPERS=${#BT_FLIPPERS[@]}
@@ -3195,7 +3457,7 @@ scan_detect_from_scanned() {
 			total_BT_PINEAPPS=${#BT_PINEAPPS[@]}
 			total_BT_CUSTOMOU=${#BT_CUSTOMOU[@]}
 
-			total_found_saved=$((total_BT_AXONCAMS + total_BT_CCSKIMMR + total_BT_FLIPPERS + total_BT_FLOCKCAM + total_BT_MESHTAST + total_BT_NESTCAMS + total_BT_SMRTGLAS + total_BT_TILETAGS + total_BT_USBKILLS + total_BT_PINEAPPS + total_BT_CUSTOMOU))
+			total_found_saved=$((total_BT_APLAIRTG + total_BT_AXONCAMS + total_BT_CCSKIMMR + total_BT_FLIPPERS + total_BT_FLOCKCAM + total_BT_MESHTAST + total_BT_NESTCAMS + total_BT_SMRTGLAS + total_BT_TILETAGS + total_BT_USBKILLS + total_BT_PINEAPPS + total_BT_CUSTOMOU))
 			if [[ "$total_found_saved" -gt 0 ]] ; then
 				LOG red "Found ${total_found_saved} suspect Saved ${text_target_LC}(s)..."
 				printf "Found %s suspect Saved Target(s)...\n" "${total_found_saved}" >> "$REPORT_DETECT_FILE"
@@ -3249,6 +3511,9 @@ scan_detect_from_scanned() {
 			LOG " "
 			sleep 0.25
 		else
+			warn_bt_aplairtg
+			LOG " "
+			sleep 0.25
 			warn_bt_axoncams
 			LOG " "
 			sleep 0.25
@@ -3337,8 +3602,12 @@ detect_jammers() {
 	reset_gpsd
 	
 	# possible cleanup from last run
-	rm "$KEYCKTMP_FILE" 2>/dev/null
-	if [[ "$archCur" == "pager" ]] ; then killall evtest 2>/dev/null; fi
+	if [[ "$archCur" == "pager" ]] ; then 
+		killall evtest 2>/dev/null
+		rm "$KEYCKTMP_FILE" 2>/dev/null
+	else
+		sudo rm -f "$KEYCKTMP_FILE" 2>/dev/null
+	fi
 	
 	# set on each total run
 	cancel_app=0
@@ -3348,12 +3617,23 @@ detect_jammers() {
 	local temp_devname="Apple"
 	# adapter_base decides which adapter is the one doing the pinging
 	# the other adapter will receive the request and reply back
+	# can be either hci0 or hci1, only written to communicate between hci0 & hci1
+	# not supported currently for hci2 or hci3
 	local adapter_base="hci0"
 
 	local maxJams=5
 	local maxNoJams=25
+	local maxNoJamCPU=55
+	
+	# pager setting
 	local showruntimeNS=0
 	local nsCheck=3050000
+	local maxNSminhits=3
+	local minNScount=0
+	local minNS=355000
+	# non pager setting
+	local nsCheckCustom=4850000
+	local showruntimeNSCustom=1
 
 	local jams=0
 	local nojamcount=0
@@ -3386,6 +3666,7 @@ detect_jammers() {
 	local jammerDet_display=""
 	local nojamstreak_display=""
 	local totalruntime_display=""
+	local runtime_display=""
 
 	# check pause/cancel
 	check_cancel_jam() {
@@ -3610,6 +3891,7 @@ detect_jammers() {
 		local max_value=0
 		local mins=0
 		local secs=0
+		runtime_display=""
 		length=${#nojamstreak}
 		nojamstreak_display="$nojamstreak"
 		if [[ "$length" -lt 11 ]] ; then
@@ -3641,12 +3923,16 @@ detect_jammers() {
 			totalruntime_display="${totalruntime}s"
 		fi
 		jams_display=" $jams ¨¨¨"
+		if [[ "$showruntimeNS" -eq 1 ]] ; then
+			runtime_display=" / ${runtime}s($runtimens ns)"
+		fi
 	}
 	
 	resp=$(CONFIRMATION_DIALOG "Confirm Jammer Detection?")
 	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
 		if [[ "$scan_stealth" -eq 0 ]] ; then LED WHITE; fi
 	
+		KEYCKTMP_FILE=$(mktemp /tmp/KeyCKTMP.XXXXXX)
 		TIMESTAMP=$(date +"%Y-%m-%d_%H%M%S")
 		REPORT_DETJAM_FILE="$LOOT_DETECT/Report_Jam_${TIMESTAMP}.txt"
 		printf "═════════════════════════════════════════════════\n" >> "$REPORT_DETJAM_FILE"
@@ -3726,8 +4012,8 @@ Are you sure you have a USB Bluetooth Adapter plugged in and want to continue ha
 				pinged_device="$hci1_MAC"
 			fi
 			if [[ "$archCur" != "pager" ]] ; then
-				showruntimeNS=1
-				nsCheck=4650000
+				showruntimeNS="$showruntimeNSCustom"
+				nsCheck="$nsCheckCustom"
 			fi
 			
 			printf "════════════════════════════════════════════\n" >> "$REPORT_DETJAM_FILE"
@@ -3793,69 +4079,82 @@ Are you sure you have a USB Bluetooth Adapter plugged in and want to continue ha
 					totalruntime=$((totalruntime+runtime))
 					endms=$EPOCHREALTIME; endms=${endms/./}; runtimens=$((endms - startms))
 					# check runtime of result
-					if [[ "$runtimens" -gt "$nsCheck" && "$runnum" -gt 1 ]] ; then
-						nojamstreak_hold="$nojamstreak"; jamLast_hold="$jamLast"
-						jams=$((jams+1))
-						jamLast=1
-						jamConf=1
-						nojamcount=0
-						nojamstreak=0
+					# check if adapter is recording too low of result
+					if [[ "$runtimens" -lt "$minNS" ]] ; then
+						minNScount=$((minNScount+1))
 						length_display
-						runtime_display=""
-						if [[ "$showruntimeNS" -eq 1 ]] ; then
-							runtime_display="${runtime}s ($runtimens ns)"
+						status_display="¨ERROR¨"
+						LOG magenta "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display}${runtime_display}"
+						if [[ "$minNScount" -ge "$maxNSminhits" ]] ; then
+							# adapter down / not acting properly
+							minNScount=0
+							LOG blue "--------------------------------------------------"
+							LOG magenta "----- Adapter ERROR, Restarting Bluetooth... -----"
+							service $servicebt_cur restart 2>/dev/null
+							sleep 2
+							bring_adapters_up
+							totalruntime=$((totalruntime+5))
 						fi
-						status_display="JAM! ¨ "
-						LOG red "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display} ${runtime_display}"
-						LOG blue "--------------------------------------------------"
-						if [[ "$nojamstreak_hold" -gt 55 ]] ; then
-							LOG magenta "--- JAM! ---- Possible Jam DETECTED! ---- JAM! ---"
-							LOG magenta "--- Likely a device hiccup! ex. CPU/Memory Lag ---"
-						else
-							if [[ "$jamLast_hold" -eq 1 ]] ; then
-								# LOG "Sequential JAM!"
-								LOG red "-- JAM! - Jam CONFIRMED! - Getting Warm! - JAM! --"
-								seqJams=$((seqJams+1))
-							else
+					else
+						minNScount=0
+						# time recorded is above min, check if above max
+						if [[ "$runtimens" -gt "$nsCheck" && "$runnum" -gt 1 ]] ; then
+							nojamstreak_hold="$nojamstreak"; jamLast_hold="$jamLast"
+							jams=$((jams+1))
+							jamLast=1
+							jamConf=1
+							nojamcount=0
+							nojamstreak=0
+							length_display
+							status_display="JAM! ¨ "
+							LOG red "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display}${runtime_display}"
+							LOG blue "--------------------------------------------------"
+							if [[ "$nojamstreak_hold" -gt "$maxNoJamCPU" ]] ; then
 								LOG magenta "--- JAM! ---- Possible Jam DETECTED! ---- JAM! ---"
+								LOG magenta "--- Likely a device hiccup! ex. CPU/Memory Lag ---"
+							else
+								if [[ "$jamLast_hold" -eq 1 ]] ; then
+									# LOG "Sequential JAM!"
+									LOG red "-- JAM! - Jam CONFIRMED! - Getting Warm! - JAM! --"
+									seqJams=$((seqJams+1))
+								else
+									LOG magenta "--- JAM! ---- Possible Jam DETECTED! ---- JAM! ---"
+								fi
+							fi
+							LOG blue "--------------------------------------------------"
+							printf "%s - EVENT: Jam!\n" $(date +"%Y-%m-%d_%H%M%S") >> "$REPORT_DETJAM_FILE"
+							printf "Jams: %s | Found: %s | Clean Streak: %s | Uptime: %s\n" "$jams" "$jammerDet" "$nojamstreak_hold" "$totalruntime_display" >> "$REPORT_DETJAM_FILE"
+						else
+							# runtime good, no jam
+							nojamcount=$((nojamcount+1))
+							nojamstreak=$((nojamstreak+1))
+							jamLast=0
+							length_display
+							if [[ "$runnum" -gt 1 ]] ; then
+								# status_display="Safe ¨ "
+								status_display="No Jam "
+							else
+								status_display="Start -"
+							fi
+							if [[ "$nojamcount" -ge "$maxNoJams" ]] ; then
+								jams_display=" RESET"
+								LOG blue "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display}${runtime_display}"
+							else
+								LOG "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display}${runtime_display}"
 							fi
 						fi
-						LOG blue "--------------------------------------------------"
-						printf "%s - EVENT: Jam!\n" $(date +"%Y-%m-%d_%H%M%S") >> "$REPORT_DETJAM_FILE"
-						printf "Jams: %s | Found: %s | Clean Streak: %s | Uptime: %s\n" "$jams" "$jammerDet" "$nojamstreak_hold" "$totalruntime_display" >> "$REPORT_DETJAM_FILE"
-					else
-						# runtime good, no jam
-						nojamcount=$((nojamcount+1))
-						nojamstreak=$((nojamstreak+1))
-						jamLast=0
-						length_display
-						runtime_display=""
-						if [[ "$showruntimeNS" -eq 1 ]] ; then
-							runtime_display="${runtime}s ($runtimens ns)"
-						fi
-						if [[ "$runnum" -gt 1 ]] ; then
-							# status_display="Safe ¨ "
-							status_display="No Jam "
-						else
-							status_display="Start -"
-						fi
 						if [[ "$nojamcount" -ge "$maxNoJams" ]] ; then
-							jams_display=" RESET"
-							LOG blue "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display} ${runtime_display}"
-						else
-							LOG "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display} ${runtime_display}"
+							# LOG " ------------- Resetting Jams"
+							nojamcount=0
+							jams=0
+							seqJams=0
 						fi
-					fi
-					if [[ "$nojamcount" -ge "$maxNoJams" ]] ; then
-						# LOG " ------------- Resetting Jams"
-						nojamcount=0
-						jams=0
-						seqJams=0
 					fi
 					sleep 1
 					totalruntime=$((totalruntime+1))
 				else
 					# got NO result from info or TIMED OUT
+					minNScount=0
 					runtime=$((SECONDS-start))
 					totalruntime=$((totalruntime+runtime))
 					endms=$EPOCHREALTIME; endms=${endms/./}; runtimens=$((endms - startms))
@@ -3863,6 +4162,7 @@ Are you sure you have a USB Bluetooth Adapter plugged in and want to continue ha
 					# check hciconfig status for both hci0 and hci1
 					checkStrict=1
 					hci_check_status
+					totalruntime=$((totalruntime+2))
 					# reset strict check
 					checkStrict=0
 					if [[ "$adapterdown" -eq 0 ]] ; then
@@ -3875,14 +4175,10 @@ Are you sure you have a USB Bluetooth Adapter plugged in and want to continue ha
 						nojamcount=0
 						nojamstreak=0
 						length_display
-						runtime_display=""
-						if [[ "$showruntimeNS" -eq 1 ]] ; then
-							runtime_display="${runtime}s ($runtimens ns)"
-						fi
 						status_display="FULLJAM"
-						LOG red "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display} ${runtime_display}"
+						LOG red "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display}${runtime_display}"
 						LOG blue "--------------------------------------------------"
-						if [[ "$nojamstreak_hold" -gt 55 ]] ; then
+						if [[ "$nojamstreak_hold" -gt "$maxNoJamCPU" ]] ; then
 							LOG red "- FULLJAM! -- Possible Jam DETECTED! -- FULLJAM! -"
 							LOG magenta "--- Likely a device hiccup! ex. CPU/Memory Lag ---"
 						else
@@ -3898,26 +4194,22 @@ Are you sure you have a USB Bluetooth Adapter plugged in and want to continue ha
 						printf "%s - EVENT: Full Jam!\n" $(date +"%Y-%m-%d_%H%M%S") >> "$REPORT_DETJAM_FILE"
 						printf "Jams: %s | Found: %s | Clean Streak: %s | Uptime: %s\n" "$jams" "$jammerDet" "$nojamstreak_hold" "$totalruntime_display" >> "$REPORT_DETJAM_FILE"
 						sleep 3
-						totalruntime=$((totalruntime+5))
+						totalruntime=$((totalruntime+3))
 					else
 						# LOG "Adapter(s) DOWN, false positive!"
 						# LOG "hcitool FAIL - HOW IS THIS POSSIBLE?"
 						length_display
-						runtime_display=""
-						if [[ "$showruntimeNS" -eq 1 ]] ; then
-							runtime_display="${runtime}s ($runtimens ns)"
-						fi
 						status_display="DOWN --"
-						LOG magenta "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display} ${runtime_display}"
+						LOG magenta "${status_display}|${jams_display}| $jammerDet_display | $nojamstreak_display | ${totalruntime_display}${runtime_display}"
 						LOG blue "--------------------------------------------------"
 						LOG magenta "-------- Adapter DOWN/ERROR, Resetting... --------"
 						bring_adapters_up
-						totalruntime=$((totalruntime+5))
+						totalruntime=$((totalruntime+3))
 					fi
 				fi
 				if [[ "$jams" -ge "$maxJams" ]] ; then
 					# jammer detected
-					LOG blue "--------------------------------------------------"
+					# LOG blue "--------------------------------------------------"
 					if [[ "$seqJams" -gt 0 ]] ; then
 						LOG red     "-- JAMMED! ---- Jammer CONFIRMED! ----- JAMMED! --"
 						LOG red     "--------- Jammer very Close or Powerful! ---------"
@@ -3985,8 +4277,12 @@ Are you sure you have a USB Bluetooth Adapter plugged in and want to continue ha
 			fi
 		
 			LOG "Cleaning up..."
-			rm "$KEYCKTMP_FILE" 2>/dev/null
-			if [[ "$archCur" == "pager" ]] ; then killall evtest 2>/dev/null; fi
+			if [[ "$archCur" == "pager" ]] ; then 
+				killall evtest 2>/dev/null
+				rm "$KEYCKTMP_FILE" 2>/dev/null
+			else
+				sudo rm -f "$KEYCKTMP_FILE" 2>/dev/null
+			fi
 			
 			# return adapters to noscan
 			hciconfig hci0 up noscan 2>/dev/null
