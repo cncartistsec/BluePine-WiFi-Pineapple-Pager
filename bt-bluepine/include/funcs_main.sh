@@ -1,12 +1,13 @@
 #!/bin/bash
 # Main Functions for BluePine
 # Author: cncartist
-# Version: 1.5
+# Version: 1.6
 # 
 # update_bluetooth_status
 # update_bluetooth_name
-# generate_random_mac
 # update_bluetooth_mac
+# update_bluetooth_int
+# generate_random_mac
 # 
 # saved_targets_check
 # current_target_clear
@@ -30,6 +31,16 @@
 # check_cancel
 # target_mac_check
 # 
+# node_modifyhs_ssid
+# node_modifyhs_pw
+# node_modifyhs_int
+# node_modifyhs_netw
+#
+# gps_info
+# gps_verify
+# gps_deviceselect
+# gps_baudselect
+# 
 # bt_browse_services
 # bt_get_info
 # bt_get_vendor
@@ -37,7 +48,7 @@
 # 
 
 # change BT status
-update_bluetooth_status(){
+update_bluetooth_status() {
 	# devicecurrnt="hci0"
 	local devicecurrnt="$1"
 	local devicestatus="DOWN"
@@ -207,7 +218,7 @@ update_bluetooth_status(){
 }
 
 # change BT name
-update_bluetooth_name(){
+update_bluetooth_name() {
 	# verify bluetoothd for this function
 	bluetoothd_check
 	
@@ -346,7 +357,7 @@ For Device: ${devicecurrnt}?")
 }
 
 
-update_bluetooth_mac(){
+update_bluetooth_mac() {
 	# verify bluetoothd for this function
 	bluetoothd_check
 	
@@ -717,6 +728,91 @@ update_bluetooth_mac(){
 	fi
 }
 
+# select bluetooth interface
+update_bluetooth_int() {
+	LOG cyan "Currently Selected BT Interface: ${scan_btiface}"
+	
+	# Read the sorted command output directly into an array line-by-line
+	# mapfile -t interfaces < <(iw dev | grep Interface | awk '!/mon$/ {sub(/^[ \t]*Interface[ \t]*/, ""); print}' | sort)
+	mapfile -t interfaces < <(hciconfig | awk '/^[ \t]*hci[0-9]+/ {sub(/:.*/, ""); gsub(/^[ \t]+/, ""); print}' | sort)
+
+	# Check if the array contains any items
+	if [ ${#interfaces[@]} -gt 0 ]; then
+		LOG "Found ${#interfaces[@]} Bluetooth Interface(s):"
+		
+		local iface_count_count_arr=$(( ${#interfaces[@]} - 1 ))
+	
+		LOG magenta "================================== Bluetooth ===="
+		local tmpnum=0
+		# Loop through the array safely handling spaces
+		for interface in "${interfaces[@]}"; do
+			vendornm=$(hciconfig "${interface:-$interface}" -a | awk -F': ' '/Manufacturer:/ {print $2}')
+			LOG "${tmpnum}: $interface - $vendornm"
+			tmpnum=$((tmpnum + 1))
+		done
+		LOG magenta "================================== Bluetooth ===="
+		
+		if [ ${#interfaces[@]} -gt 1 ]; then
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "Press OK to confirm selecting a BT Interface..."
+				WAIT_FOR_BUTTON_PRESS A
+			fi
+			sleep 0.5
+			
+			resp=$(CONFIRMATION_DIALOG "Confirm selecting Bluetooth Interface?")
+			if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+				# SHOW LIST FOR SELECTION IF CONFIRMED
+				local ifacenumdef=0
+				while true; do
+					if [[ "$archCur" == "pager" ]] ; then
+						LOG "Press OK to select a BT Interface..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+					fi
+					sleep 0.5
+				
+					ifacenum=$(NUMBER_PICKER "BT Interface # (0-${iface_count_count_arr})" $ifacenumdef)
+					case $? in $DUCKYSCRIPT_CANCELLED|$DUCKYSCRIPT_REJECTED) ifacenum=$ifacenumdef ;; esac
+					[ $ifacenum -lt 0 ] && ifacenum=0
+					[ $ifacenum -gt $iface_count_count_arr ] && ifacenum=$iface_count_count_arr
+					
+					new_iface="${interfaces[$ifacenum]}"
+					
+					resp=$(CONFIRMATION_DIALOG "Accept new Bluetooth Interface ${new_iface} ?")
+					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+						LOG green "New Bluetooth Interface Selected!"
+						LOG magenta "================================== Interface ===="
+						LOG "Old Bluetooth Interface: ${scan_btiface}"
+						LOG magenta "New Bluetooth Interface: ${new_iface}"
+						LOG magenta "================================== Interface ===="
+						scan_btiface="$new_iface"
+						BLE_IFACE="$new_iface"
+						# save config
+						PAYLOAD_SET_CONFIG bluepinesuite scan_btiface "$scan_btiface"
+						LOG "Press OK to continue..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+						sleep 0.25
+						break
+					else 
+						LOG red "Skip BT Interface: ${new_iface}, selecting new..."
+					fi
+					sleep 0.5
+				done
+			else
+				LOG "Skipped selecting BT Interface..."
+				LOG " "
+			fi
+		else
+			LOG "Only 1 Bluetooth Interface Found..."
+			LOG " "
+		fi
+	else
+		LOG red "No Bluetooth Interfaces Found."
+		LOG " "
+	fi
+}
+
 # Generate a random 6-byte hexadecimal string with colons for MAC format
 function generate_random_mac() {
     # Set the U/L bit (second-least-significant bit of the first octet) to 1 for local administration
@@ -733,10 +829,6 @@ function generate_random_mac() {
     mac="${new_first_byte}:${mac:2:2}:${mac:4:2}:${mac:6:2}:${mac:8:2}:${mac:10:2}"
     echo "$mac"
 }
-
-
-
-
 
 
 
@@ -880,10 +972,10 @@ saved_targets_savecurrent() {
 				targetlist_comp="n/a"
 			fi
 			
-			if [[ "$targetlist_comp" == "n/a" ]] ; then
+			if [[ "$targetlist_comp" == "n/a" || "$targetlist_name" == "$targetlist_comp" ]] ; then
 				targetlist_comp=""
 			else
-				if [[ -z "$targetlist_name" ]] || [[ "$targetlist_name" == "Unknown" ]] ; then
+				if [[ -z "$targetlist_name" || "$targetlist_name" == "Unknown" ]] ; then
 					targetlist_name="$targetlist_comp"
 					targetlist_comp=""
 				else
@@ -950,10 +1042,10 @@ saved_targets_saveall() {
 					targetlist_name="${BT_TARGETS[$mac]}"
 				fi
 				targetlist_comp="${BT_COMPS[$mac]}"
-				if [[ "$targetlist_comp" == "n/a" ]] ; then
+				if [[ "$targetlist_comp" == "n/a" || "$targetlist_name" == "$targetlist_comp" ]] ; then
 					targetlist_comp=""
 				else
-					if [[ -z "$targetlist_name" ]] || [[ "$targetlist_name" == "Unknown" ]] ; then
+					if [[ -z "$targetlist_name" || "$targetlist_name" == "Unknown" ]] ; then
 						targetlist_name="$targetlist_comp"
 						targetlist_comp=""
 					else
@@ -1458,7 +1550,7 @@ select_target() {
 					targetlist_name="${BT_TARGETS[$targetlist_mac]}"
 				fi
 				targetlist_comp="${BT_COMPS[$targetlist_mac]}"
-				if [[ "$targetlist_comp" == "n/a" ]] ; then
+				if [[ "$targetlist_comp" == "n/a" || "$targetlist_name" == "$targetlist_comp" ]] ; then
 					targetlist_comp=""
 				else
 					if [[ -z "$targetlist_name" || "$targetlist_name" == "Unknown" ]] ; then
@@ -1928,6 +2020,10 @@ settings_check() {
 	if [[ "$filter_localall" -eq 1 ]]; then filter_localall=1; else filter_localall=0; fi
 	if [[ "$filter_multiall" -eq 1 ]]; then filter_multiall=1; else filter_multiall=0; fi
 	if [[ "$filter_emptyoui" -eq 1 ]]; then filter_emptyoui=1; else filter_emptyoui=0; fi
+	if [[ "$filter_airtag" -eq 1 ]]; then filter_airtag=1; else filter_airtag=0; fi
+	
+	if [[ "$nodes_enabled" -eq 1 ]]; then nodes_enabled=1; else nodes_enabled=0; fi
+	if [[ "$hotspot_enabled" -eq 1 ]]; then hotspot_enabled=1; else hotspot_enabled=0; fi
 	
 	if [[ "$scan_friendly" -eq 0 ]]; then
 		text_hunt_UC="Hunt"
@@ -1954,6 +2050,14 @@ settings_check() {
 			echo 1 > "$btn_b_path"
 		fi
 	fi
+	[[ -z "$previousWiFi" || "$previousWiFi" == null ]] && previousWiFi=""
+	[[ -z "$nodes_ssid" || "$nodes_ssid" == null ]] && nodes_ssid="NeedleNetwork"
+	[[ -z "$nodes_pw" || "$nodes_pw" == null ]] && nodes_pw="MyNeedleNetwork65432"
+	[[ -z "$nodes_iface" || "$nodes_iface" == null ]] && nodes_iface="wlan0"
+	[[ -z "$nodes_netw" || "$nodes_netw" == null ]] && nodes_netw="10.42.0.1"
+	[[ -z "$scan_btiface" || "$scan_btiface" == null ]] && scan_btiface="hci0"
+	[[ -z "$gps_selport" || "$gps_selport" == null ]] && gps_selport="/dev/ttyAMA0"
+	[[ -z "$gps_selbaud" || "$gps_selbaud" == null ]] && gps_selbaud=9600
 }
 
 # configuration check to see if no config set but config avail
@@ -1972,9 +2076,9 @@ config_check() {
 			# found data mismatch, ask if user wants to restore previous settings/statistics?
 			# resp=$(CONFIRMATION_DIALOG "Config/History Backup Exists, but not loaded or recent firmware update has cleared all saved Configuration & History data! Confirm Load of Previous Config/History?")
 			# if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
-				silent_backup=1
+				silent_action=1
 				config_restore
-				silent_backup=0
+				silent_action=0
 			# else LOG "Configuration Restore skipped..."; fi
 		fi
 	fi
@@ -2020,6 +2124,29 @@ config_read() {
 	if [[ "$line" -eq 1 ]] ; then filter_multiall=1; else filter_multiall=0; fi
 	line=$(jq -r '.filter_emptyoui' "$SAVEDCONFIG_FILE")
 	if [[ "$line" -eq 1 ]] ; then filter_emptyoui=1; else filter_emptyoui=0; fi
+	line=$(jq -r '.filter_airtag' "$SAVEDCONFIG_FILE")
+	if [[ "$line" -eq 1 ]] ; then filter_airtag=1; else filter_airtag=0; fi
+	
+	line=$(jq -r '.nodes_enabled' "$SAVEDCONFIG_FILE")
+	if [[ "$line" -eq 1 ]] ; then nodes_enabled=1; else nodes_enabled=0; fi
+	line=$(jq -r '.hotspot_enabled' "$SAVEDCONFIG_FILE")
+	if [[ "$line" -eq 1 ]] ; then hotspot_enabled=1; else hotspot_enabled=0; fi
+	line=$(jq -r '.previousWiFi' "$SAVEDCONFIG_FILE")
+	previousWiFi="$line"
+	line=$(jq -r '.nodes_ssid' "$SAVEDCONFIG_FILE")
+	nodes_ssid="$line"
+	line=$(jq -r '.nodes_pw' "$SAVEDCONFIG_FILE")
+	nodes_pw="$line"
+	line=$(jq -r '.nodes_iface' "$SAVEDCONFIG_FILE")
+	nodes_iface="$line"
+	line=$(jq -r '.nodes_netw' "$SAVEDCONFIG_FILE")
+	nodes_netw="$line"
+	line=$(jq -r '.scan_btiface' "$SAVEDCONFIG_FILE")
+	scan_btiface="$line"
+	line=$(jq -r '.gps_selport' "$SAVEDCONFIG_FILE")
+	gps_selport="$line"
+	line=$(jq -r '.gps_selbaud' "$SAVEDCONFIG_FILE") # check if num
+	if [[ "$line" =~ $re && "$line" -gt 0 ]] ; then gps_selbaud="$line"; else gps_selbaud=9600; fi
 	
 	line=$(jq -r '.total_scans' "$SAVEDCONFIG_FILE") # check if num
 	if [[ "$line" =~ $re && "$line" -gt 0 ]] ; then total_scans="$line"; else total_scans=0; fi
@@ -2039,7 +2166,7 @@ config_read() {
 config_backup() {
 	# LOG "config_backup"
 	local confirmFile=0
-	if [[ "$silent_backup" -eq 0 ]] ; then
+	if [[ "$silent_action" -eq 0 ]] ; then
 		# check if file is not empty this time around
 		if [[ -s "$SAVEDCONFIG_FILE" ]]; then
 			# file exists, has contents, confirm overwrite
@@ -2056,7 +2183,7 @@ Confirm Overwrite?")
 		fi
 	else confirmFile=1; fi
 	if [[ "$confirmFile" -eq 1 ]]; then
-		if [[ "$silent_backup" -eq 0 ]] ; then LOG "Configuration Backup started..."; fi
+		if [[ "$silent_action" -eq 0 ]] ; then LOG "Configuration Backup started..."; fi
 		# Create JSON file using jq
 		jq -n \
 		  --argjson val_DATA_SCAN_SECONDS "$DATA_SCAN_SECONDS" \
@@ -2076,15 +2203,26 @@ Confirm Overwrite?")
 		  --argjson val_filter_localall "$filter_localall" \
 		  --argjson val_filter_multiall "$filter_multiall" \
 		  --argjson val_filter_emptyoui "$filter_emptyoui" \
+		  --argjson val_filter_airtag "$filter_airtag" \
+		  --argjson val_nodes_enabled "$nodes_enabled" \
+		  --argjson val_hotspot_enabled "$hotspot_enabled" \
+		  --arg val_previousWiFi "$previousWiFi" \
+		  --arg val_nodes_ssid "$nodes_ssid" \
+		  --arg val_nodes_pw "$nodes_pw" \
+		  --arg val_nodes_iface "$nodes_iface" \
+		  --arg val_nodes_netw "$nodes_netw" \
+		  --arg val_scan_btiface "$scan_btiface" \
+		  --arg val_gps_selport "$gps_selport" \
+		  --argjson val_gps_selbaud "$gps_selbaud" \
 		  --argjson val_total_scans "$total_scans" \
 		  --argjson val_total_detected "$total_detected" \
 		  --argjson val_total_scan_min "$total_scan_min" \
 		  --arg val_custom_oui "$custom_oui" \
 		  --arg val_custom_name "$custom_name" \
-		  '{DATA_SCAN_SECONDS: $val_DATA_SCAN_SECONDS, scan_btle: $val_scan_btle, scan_btclassic: $val_scan_btclassic, scan_infrepeat: $val_scan_infrepeat, scan_mute: $val_scan_mute, scan_debug: $val_scan_debug, scan_privacy: $val_scan_privacy, scan_friendly: $val_scan_friendly, scan_stealth: $val_scan_stealth, skip_ask_1st_scan: $val_skip_ask_1st_scan, skip_ask_ringtones: $val_skip_ask_ringtones, selnum_main: $val_selnum_main, filter_multilocal: $val_filter_multilocal, filter_randomall: $val_filter_randomall, filter_localall: $val_filter_localall, filter_multiall: $val_filter_multiall, filter_emptyoui: $val_filter_emptyoui, total_scans: $val_total_scans, total_detected: $val_total_detected, total_scan_min: $val_total_scan_min, custom_oui: $val_custom_oui, custom_name: $val_custom_name}' > "$SAVEDCONFIG_FILE"
-		if [[ "$silent_backup" -eq 0 ]] ; then LOG green "Configuration Backup complete!"; fi
+		  '{DATA_SCAN_SECONDS: $val_DATA_SCAN_SECONDS, scan_btle: $val_scan_btle, scan_btclassic: $val_scan_btclassic, scan_infrepeat: $val_scan_infrepeat, scan_mute: $val_scan_mute, scan_debug: $val_scan_debug, scan_privacy: $val_scan_privacy, scan_friendly: $val_scan_friendly, scan_stealth: $val_scan_stealth, skip_ask_1st_scan: $val_skip_ask_1st_scan, skip_ask_ringtones: $val_skip_ask_ringtones, selnum_main: $val_selnum_main, filter_multilocal: $val_filter_multilocal, filter_randomall: $val_filter_randomall, filter_localall: $val_filter_localall, filter_multiall: $val_filter_multiall, filter_emptyoui: $val_filter_emptyoui, filter_airtag: $val_filter_airtag, nodes_enabled: $val_nodes_enabled, hotspot_enabled: $val_hotspot_enabled, previousWiFi: $val_previousWiFi, nodes_ssid: $val_nodes_ssid, nodes_pw: $val_nodes_pw, nodes_iface: $val_nodes_iface, nodes_netw: $val_nodes_netw, scan_btiface: $val_scan_btiface, gps_selport: $val_gps_selport, gps_selbaud: $val_gps_selbaud, total_scans: $val_total_scans, total_detected: $val_total_detected, total_scan_min: $val_total_scan_min, custom_oui: $val_custom_oui, custom_name: $val_custom_name}' > "$SAVEDCONFIG_FILE"
+		if [[ "$silent_action" -eq 0 ]] ; then LOG green "Configuration Backup complete!"; fi
 	fi
-	if [[ "$silent_backup" -eq 0 ]] ; then LOG " "; fi
+	if [[ "$silent_action" -eq 0 ]] ; then LOG " "; fi
 }
 
 # configuration restore
@@ -2092,9 +2230,9 @@ config_restore() {
 	# LOG "config_restore"
 	# check if file is not empty this time around
 	if [[ -s "$SAVEDCONFIG_FILE" ]]; then
-		if [[ "$silent_backup" -eq 0 ]] ; then LOG "Reading Configuration..."; fi
+		if [[ "$silent_action" -eq 0 ]] ; then LOG "Reading Configuration..."; fi
 		config_read
-		if [[ "$silent_backup" -eq 0 ]] ; then LOG "Restoring Configuration..."; fi
+		if [[ "$silent_action" -eq 0 ]] ; then LOG "Restoring Configuration..."; fi
 		# restore config
 		PAYLOAD_SET_CONFIG bluepinesuite DATA_SCAN_SECONDS "$DATA_SCAN_SECONDS"
 		PAYLOAD_SET_CONFIG bluepinesuite scan_btle "$scan_btle"
@@ -2116,6 +2254,18 @@ config_restore() {
 		PAYLOAD_SET_CONFIG bluepinesuite filter_localall "$filter_localall"
 		PAYLOAD_SET_CONFIG bluepinesuite filter_multiall "$filter_multiall"
 		PAYLOAD_SET_CONFIG bluepinesuite filter_emptyoui "$filter_emptyoui"
+		PAYLOAD_SET_CONFIG bluepinesuite filter_airtag "$filter_airtag"
+		
+		PAYLOAD_SET_CONFIG bluepinesuite nodes_enabled "$nodes_enabled"
+		PAYLOAD_SET_CONFIG bluepinesuite hotspot_enabled "$hotspot_enabled"
+		PAYLOAD_SET_CONFIG bluepinesuite previousWiFi "$previousWiFi"
+		PAYLOAD_SET_CONFIG bluepinesuite nodes_ssid "$nodes_ssid"
+		PAYLOAD_SET_CONFIG bluepinesuite nodes_pw "$nodes_pw"
+		PAYLOAD_SET_CONFIG bluepinesuite nodes_iface "$nodes_iface"
+		PAYLOAD_SET_CONFIG bluepinesuite nodes_netw "$nodes_netw"
+		PAYLOAD_SET_CONFIG bluepinesuite scan_btiface "$scan_btiface"
+		PAYLOAD_SET_CONFIG bluepinesuite gps_selport "$gps_selport"
+		PAYLOAD_SET_CONFIG bluepinesuite gps_selbaud "$gps_selbaud"
 		
 		PAYLOAD_SET_CONFIG bluepinesuite total_scans "$total_scans"
 		PAYLOAD_SET_CONFIG bluepinesuite total_detected "$total_detected"
@@ -2125,11 +2275,11 @@ config_restore() {
 		PAYLOAD_SET_CONFIG bluepinesuite custom_name "$custom_name"
 		# check settings
 		settings_check
-		if [[ "$silent_backup" -eq 0 ]] ; then LOG green "Configuration Backup restored!"; fi
+		if [[ "$silent_action" -eq 0 ]] ; then LOG green "Configuration Backup restored!"; fi
 	else
 		LOG red "ERROR: Configuration Backup missing!"
 	fi
-	if [[ "$silent_backup" -eq 0 ]] ; then LOG " "; fi
+	if [[ "$silent_action" -eq 0 ]] ; then LOG " "; fi
 }
 
 # start cancel Scan
@@ -2156,6 +2306,7 @@ start_evtest() {
 
 # check pause/cancel
 check_cancel() {
+	local gps_disptxt=""
 	# LOG "checking pause/cancel"
 	# load content of file into string, then check string vs match
 	# local FILE_CONTENT=$(<"$KEYCKTMP_FILE")
@@ -2181,14 +2332,20 @@ check_cancel() {
 			cancel_app=1
 			cancel_press=0
 			trap cleanup SIGINT
-		else 
+		else
+			# check gps status
+			gpspos_cur=$(GPS_GET)
+			if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+				gps_disptxt=' +GPS+' # GPS is valid
+			fi
 			sleep 1
 			# restart evtest
 			start_evtest
 			cancel_app=0
 			cancel_press=0
 			LOG blue "-------------------------------------------"
-			LOG cyan "|- Signal -| -- MAC Address -- - Name/Manuf"
+			LOG cyan "|- Signal -| -- MAC Address -- - Name/Manuf${gps_disptxt}"
+			# LOG cyan "|- Signal -| -- MAC Address -- - Name/Manuf"
 			LOG blue "-------------------------------------------"
 		fi
 	else
@@ -2211,6 +2368,727 @@ target_mac_check() {
 
 
 
+# modify hotspot ssid
+node_modifyhs_ssid() {
+	resp=$(CONFIRMATION_DIALOG "Modify Hotspot SSID?
+
+Use only alphanumeric characters and hyphens (-). Avoid spaces, underscores (_), or punctuation symbols!")
+	# No Spaces or Special Characters: Local DNS router stacks follow the standard internet host conventions. 	
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		local new_data_pw="$nodes_ssid"
+		if [[ "$scan_privacy" -eq 1 ]] ; then 
+			priv_name_save="$new_data_pw"
+			new_data_pw="$priv_name_txt"
+		fi
+		while true; do
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "Press OK to pick a new SSID..."
+				LOG " "
+				WAIT_FOR_BUTTON_PRESS A
+			fi
+			sleep 0.25
+			# escape name for single quotes (removes some input if single quotes present)
+			new_data_pw="${new_data_pw//\'/\'}"
+			new_data_pw=$(TEXT_PICKER "Hotspot SSID" "$new_data_pw")
+			# Use only alphanumeric characters and hyphens (-). Avoid spaces, underscores (_), or punctuation symbols.
+			new_data_pw="${new_data_pw//[^a-zA-Z0-9-]/}"
+			local valid="true"
+			# check length > 3, not blank
+			if [[ -z "$new_data_pw" || "${#new_data_pw}" -lt 4 ]] ; then
+				valid="false"
+				LOG red "Invalid input!"
+			fi
+			if [[ "$valid" == "true" ]] ; then
+				LOG cyan "New Hotspot SSID: ${new_data_pw}"
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG "Press OK to confirm..."
+					LOG " "
+					WAIT_FOR_BUTTON_PRESS A
+				fi
+				sleep 0.25
+				# Confirm Name Change
+				resp=$(CONFIRMATION_DIALOG "Confirm Hotspot SSID Change to '${new_data_pw}'?")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					LOG green "Hotspot SSID Changed!"
+					LOG "Old SSID: ${nodes_ssid}"
+					LOG magenta "New SSID: ${new_data_pw}"
+					nodes_ssid="$new_data_pw"
+					# save config
+					PAYLOAD_SET_CONFIG bluepinesuite nodes_ssid "$nodes_ssid"
+					break
+				fi
+			else
+				LOG red "SSID invalid, try again..."
+			fi
+		done
+		LOG "Press OK to continue..."
+		LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.25
+		break
+	else 
+		LOG red "Skip Modifying Hotspot SSID..."
+		LOG " "
+	fi
+	sleep 0.5
+}
+
+
+# modify hotspot password
+node_modifyhs_pw() {
+	resp=$(CONFIRMATION_DIALOG "Modify Hotspot Password?
+
+No single quotes allowed in Password.")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		local new_data_pw="$nodes_pw"
+		if [[ "$scan_privacy" -eq 1 ]] ; then 
+			priv_name_save="$new_data_pw"
+			new_data_pw="$priv_name_txt"
+		fi
+		while true; do
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "Press OK to pick a new password..."
+				LOG " "
+				WAIT_FOR_BUTTON_PRESS A
+			fi
+			sleep 0.25
+			# escape name for single quotes (removes some input if single quotes present)
+			new_data_pw="${new_data_pw//\'/\'}"
+			new_data_pw=$(TEXT_PICKER "Hotspot Password" "$new_data_pw")
+			new_data_pw="${new_data_pw//\'/\'}"
+			local valid="true"
+			# check length > 3, not blank
+			if [[ -z "$new_data_pw" || "${#new_data_pw}" -lt 4 ]] ; then
+				valid="false"
+				LOG red "Invalid input!"
+			fi
+			if [[ "$valid" == "true" ]] ; then
+				LOG cyan "New Hotspot Password: ${new_data_pw}"
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG "Press OK to confirm..."
+					LOG " "
+					WAIT_FOR_BUTTON_PRESS A
+				fi
+				sleep 0.25
+				# Confirm Name Change
+				resp=$(CONFIRMATION_DIALOG "Confirm Hotspot Password Change to '${new_data_pw}'?")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					LOG green "Hotspot Password Changed!"
+					LOG magenta "=================================== Password ===="
+					LOG "Old Password: ${nodes_pw}"
+					LOG magenta "New Password: ${new_data_pw}"
+					LOG magenta "=================================== Password ===="
+					nodes_pw="$new_data_pw"
+					# save config
+					PAYLOAD_SET_CONFIG bluepinesuite nodes_pw "$nodes_pw"
+					break
+				fi
+			else
+				LOG red "Password invalid, try again..."
+			fi
+		done
+		LOG "Press OK to continue..."
+		LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.25
+		break
+	else 
+		LOG red "Skip Modifying Hotspot Password..."
+		LOG " "
+	fi
+	sleep 0.5
+}
+
+
+# select hotspot interface
+node_modifyhs_int() {
+	LOG cyan "Currently Selected HS Interface: ${nodes_iface}"
+	
+	# Read the sorted command output directly into an array line-by-line
+	mapfile -t interfaces < <(iw dev | grep Interface | awk '!/mon$/ {sub(/^[ \t]*Interface[ \t]*/, ""); print}' | sort)
+
+	# Check if the array contains any items
+	if [ ${#interfaces[@]} -gt 0 ]; then
+		LOG "Found ${#interfaces[@]} Wireless Interface(s):"
+		local iface_count_count_arr=$(( ${#interfaces[@]} - 1 ))
+		local tmpnum=0
+		local vendornm=""
+		
+		LOG magenta "=================================== Wireless ===="
+		# Loop through the array safely handling spaces
+		for interface in "${interfaces[@]}"; do
+			# this only runs for non pager currently, example
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "${tmpnum}: $interface"
+			else
+				vendornm=$(nmcli -g GENERAL.VENDOR device show $interface)
+				LOG "${tmpnum}: $interface - $vendornm"
+			fi
+			tmpnum=$((tmpnum + 1))
+		done
+		LOG magenta "=================================== Wireless ===="
+		
+		if [ ${#interfaces[@]} -gt 1 ]; then
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "Press OK to confirm selecting a Hotspot Interface..."
+				WAIT_FOR_BUTTON_PRESS A
+			fi
+			sleep 0.5
+			
+			resp=$(CONFIRMATION_DIALOG "Confirm selecting Hotspot Interface?")
+			if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+				# SHOW LIST FOR SELECTION IF CONFIRMED
+				local ifacenumdef=0
+				while true; do
+					if [[ "$archCur" == "pager" ]] ; then
+						LOG "Press OK to select a Hotspot Interface..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+					fi
+					sleep 0.5
+					ifacenum=$(NUMBER_PICKER "Hotspot Interface # (0-${iface_count_count_arr})" $ifacenumdef)
+					case $? in $DUCKYSCRIPT_CANCELLED|$DUCKYSCRIPT_REJECTED) ifacenum=$ifacenumdef ;; esac
+					[ $ifacenum -lt 0 ] && ifacenum=0
+					[ $ifacenum -gt $iface_count_count_arr ] && ifacenum=$iface_count_count_arr
+					
+					new_iface="${interfaces[$ifacenum]}"
+					
+					resp=$(CONFIRMATION_DIALOG "Accept new Hotspot Interface ${new_iface} ?")
+					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+						LOG green "New Hotspot Interface Selected!"
+						LOG magenta "================================== Interface ===="
+						LOG "Old Hotspot Interface: ${nodes_iface}"
+						LOG magenta "New Hotspot Interface: ${new_iface}"
+						LOG magenta "================================== Interface ===="
+						nodes_iface="$new_iface"
+						# save config
+						PAYLOAD_SET_CONFIG bluepinesuite nodes_iface "$nodes_iface"
+						LOG "Press OK to continue..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+						sleep 0.25
+						break
+					else 
+						LOG red "Skip Hotspot Interface: ${new_iface}, selecting new..."
+					fi
+					sleep 0.5
+				done
+			else
+				LOG "Skipped selecting Hotspot Interface..."
+				LOG " "
+			fi
+		else
+			LOG "Only 1 Wireless Interface Found..."
+			LOG " "
+		fi
+	else
+		LOG red "No Wireless Interfaces Found!"
+		LOG " "
+	fi
+}
+
+
+# modify hotspot network
+node_modifyhs_netw() {
+	resp=$(CONFIRMATION_DIALOG "Modify Hotspot Network?
+
+Network IP must end in '.1' to Broadcast Properly.")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		local new_data_pw="$nodes_netw"
+		if [[ "$scan_privacy" -eq 1 ]] ; then 
+			priv_name_save="$new_data_pw"
+			new_data_pw="$priv_name_txt"
+		fi
+		while true; do
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "Press OK to pick a new network..."
+				LOG " "
+				WAIT_FOR_BUTTON_PRESS A
+			fi
+			sleep 0.25
+			# escape name for single quotes (removes some input if single quotes present)
+			new_data_pw="${new_data_pw//\'/\'}"
+			new_data_pw=$(IP_PICKER "Hotspot Network" "$new_data_pw")
+			new_data_pw="${new_data_pw//\'/\'}"
+			local valid="true"
+
+			if [[ $new_data_pw =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] ; then
+				# Split IP into an array by the dot character
+				IFS='.' read -r -a octets <<< "$new_data_pw"
+				# Validate each octet range (0-255)
+				for octet in "${octets[@]}"; do
+					if (( octet < 0 || octet > 255 )); then
+						valid="false"
+						break
+					fi
+				done
+				# If valid, modify the last octet to .1 if needed
+				if [[ "$valid" == "true" ]] ; then
+					if [[ ! $new_data_pw =~ \.1$ ]]; then
+						new_data_pw="${new_data_pw%.*}.1"
+					fi
+					LOG "Valid Network IP updated to: $new_data_pw"
+				else
+					LOG red "Invalid Network IP: Octets out of 0-255 range"
+					valid="false"
+				fi
+			else
+				LOG red "Invalid input!"
+				valid="false"
+			fi
+			
+			if [[ "$valid" == "true" ]] ; then
+				LOG cyan "New Hotspot Network: ${new_data_pw}"
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG "Press OK to confirm..."
+					LOG " "
+					WAIT_FOR_BUTTON_PRESS A
+				fi
+				sleep 0.25
+				# Confirm Name Change
+				resp=$(CONFIRMATION_DIALOG "Confirm Hotspot Network Change to '${new_data_pw}'?")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					LOG green "Hotspot Network Changed!"
+					LOG magenta "==================================== Network ===="
+					LOG "Old Network: ${nodes_pw}"
+					LOG magenta "New Network: ${new_data_pw}"
+					LOG magenta "==================================== Network ===="
+					nodes_netw="$new_data_pw"
+					# save config
+					PAYLOAD_SET_CONFIG bluepinesuite nodes_netw "$nodes_netw"
+					break
+				fi
+			else
+				LOG red "Network invalid, try again..."
+			fi
+		done
+		LOG "Press OK to continue..."
+		LOG " "
+		WAIT_FOR_BUTTON_PRESS A
+		sleep 0.25
+		break
+	else 
+		LOG red "Skip Modifying Hotspot Network..."
+		LOG " "
+	fi
+	sleep 0.5
+}
+
+
+# gps info
+gps_info() {
+	# LOG "gps_info"
+	
+	local cur_gpslast="$gpspos_last"
+	local cur_gpsenabled="No"
+	local cur_gpsdevice=""
+	local cur_gpsbaud=""
+	local pager_gpsenabled=0
+	local cur_gpsrec="No"
+	local cur_gpsstatus="OFFLINE"
+	
+	LOG magenta "=================================== GPS Info ===="
+	if [[ "$archCur" == "pager" ]] ; then
+		pager_gpsenabled=$(uci get gpsd.core.enabled)
+		cur_gpsdevice=$(uci get gpsd.core.device)
+		cur_gpsbaud=$(uci get gpsd.core.speed)
+		if [[ "$pager_gpsenabled" -eq 1 ]] ; then
+			cur_gpsenabled="Yes"
+		fi
+	else
+		cur_gpsdevice="$gps_selport"
+		cur_gpsbaud="$gps_selbaud"
+		if [[ -c "$gps_selport" && -r "$gps_selport" ]]; then
+			cur_gpsstatus="Online"
+		fi
+		if [[ "$gps_enabled" -eq 1 ]] ; then
+			cur_gpsenabled="Yes"
+		fi
+	fi
+	LOG "Enabled: $cur_gpsenabled"	
+	LOG " "
+	LOG "Current Device: '${cur_gpsdevice}'"
+	LOG "Current Baud: '${cur_gpsbaud}'"
+	
+	gpspos_cur=$(GPS_GET)
+	if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+		gpspos_last="$gpspos_cur" # GPS is valid
+	fi
+	if [[ -n "$gpspos_last" ]] ; then
+		cur_gpsrec="Yes"
+		# format after decimal
+		printf -v gps_formatted "%.4f %.4f %.4f %.4f" $gpspos_last
+		# gps_formatted="$gpspos_last"
+		if [[ "$cur_gpslast" != "$gpspos_last" ]] ; then
+			# GPS FOUND TO BE UPDATED
+			cur_gpsstatus="Online"
+		fi
+	fi
+	LOG "Status: $cur_gpsstatus"
+	LOG " "
+	LOG "Verified / Received Coordinates: $cur_gpsrec"
+	
+	if [[ "$cur_gpsrec" == "Yes" ]] ; then
+		if [[ "$archCur" == "pager" ]] ; then
+			LOG "Press OK to confirm Showing Last GPS Position..."
+			WAIT_FOR_BUTTON_PRESS A
+		fi
+		sleep 0.5
+		resp=$(CONFIRMATION_DIALOG "Show Last GPS Position?")
+		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+			if [[ "$scan_privacy" -eq 1 ]] ; then 
+				LOG "GPS Last Pos.: -+ Hidden +-"
+			else
+				LOG "GPS Last Pos.: $gps_formatted"
+			fi
+		fi
+	fi
+	LOG magenta "=================================== GPS Info ===="
+	LOG "Press OK to continue..."
+	LOG " "
+	WAIT_FOR_BUTTON_PRESS A
+	sleep 0.25
+}
+
+# gps verify
+gps_verify() {
+	# LOG "gps_verify"
+	
+	local cur_gpsrec="No"
+	local cur_gpsenabled=0
+	local cur_gpschange="No"
+	local cur_gpslast=""
+	local loop=0
+	
+	LOG magenta "=========================== GPS Verification ===="
+	if [[ "$archCur" != "pager" ]] ; then
+		silent_action=1
+		check_pygnss
+		silent_action=0
+	fi
+	
+	gpspos_cur=$(GPS_GET)
+	if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+		gpspos_last="$gpspos_cur" # GPS is valid
+	fi
+	if [[ -n "$gpspos_last" ]] ; then
+		cur_gpsrec="Yes"
+	fi
+	LOG "Verified / Received Coordinates: $cur_gpsrec"
+	LOG " "
+	LOG "Checking GPS Configuration..."
+	sleep 2
+	if [[ "$archCur" == "pager" ]] ; then
+		cur_gpsenabled=$(uci get gpsd.core.enabled)
+		if [[ "$cur_gpsenabled" -eq 0 ]] ; then
+			LOG red "GPS Disabled on Pager!"
+			LOG "Please Check Pager GPS Configuration"
+		fi
+	else
+		cur_gpsenabled="$gps_enabled"
+		if [[ "$cur_gpsenabled" -eq 0 ]] ; then
+			LOG red "GPS Device Not Found!"
+			LOG "Please Check / Reset GPS Device or Change Device / Baud and try again."
+		fi
+	fi
+	
+	if [[ "$cur_gpsenabled" -eq 1 ]] ; then
+		if [[ "$archCur" == "pager" ]] ; then
+			LOG "Press OK to confirm Test for New Coordinates..."
+			WAIT_FOR_BUTTON_PRESS A
+		fi
+		sleep 0.5
+		resp=$(CONFIRMATION_DIALOG "Test for New GPS Coordinates?")
+		if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+			LOG "Testing for New GPS Coordinates..."
+			LOG "Please wait (max 15 seconds)..."
+			cur_gpslast="$gpspos_last"
+			while true; do
+				loop=$((loop + 1))
+				gpspos_cur=$(GPS_GET)
+				if [[ "$gpspos_cur" != "0 0 0 0" ]] ; then
+					gpspos_last="$gpspos_cur" # GPS is valid
+				fi
+				if [[ -n "$gpspos_last" ]] ; then
+					# format after decimal
+					printf -v gps_formatted "%.4f %.4f %.4f %.4f" $gpspos_last
+					# gps_formatted="$gpspos_last"
+					if [[ "$cur_gpslast" != "$gpspos_last" ]] ; then
+						# GPS FOUND TO BE UPDATED
+						cur_gpschange="Yes"
+						break
+					fi
+				fi
+				if [[ "$loop" -ge 7 ]] ; then
+					break
+				fi
+				sleep 2
+			done
+			LOG "Coordinates Updated During Test: $cur_gpschange"
+			if [[ "$cur_gpschange" == "Yes" ]] ; then
+				if [[ "$archCur" == "pager" ]] ; then
+					LOG "Press OK to confirm Showing Last GPS Position..."
+					WAIT_FOR_BUTTON_PRESS A
+				fi
+				sleep 0.5
+				resp=$(CONFIRMATION_DIALOG "Show Last GPS Position?")
+				if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+					if [[ "$scan_privacy" -eq 1 ]] ; then 
+						LOG "GPS Last Pos.: -+ Hidden +-"
+					else
+						LOG "GPS Last Pos.: $gps_formatted"
+					fi
+				fi
+			fi
+		fi
+	fi
+	LOG magenta "=========================== GPS Verification ===="
+	LOG "Press OK to continue..."
+	LOG " "
+	WAIT_FOR_BUTTON_PRESS A
+	sleep 0.25
+}
+
+# gps deviceselect
+gps_deviceselect() {
+	local cur_gpsdevice=""
+	
+	if [[ "$archCur" == "pager" ]] ; then
+		cur_gpsdevice=$(uci get gpsd.core.device)
+	else
+		cur_gpsdevice="$gps_selport"
+	fi
+	
+	LOG cyan "Current GPS Device: '${cur_gpsdevice}'"
+	
+		
+	# 1. Check persistent USB/Serial mappings (Highly reliable for USB dongles)
+	# 2. Check for common USB Serial / Modem nodes
+	# if [ -d "/dev/serial/by-id" ]; then	mapfile -t interfaces < <(ls -l /dev/serial/by-id/ | sort); fi
+	# add instead of overwriting array
+	mapfile -t -O "${#interfaces[@]}" interfaces < <(ls -1 /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | sort)
+	# /dev/ttyUSB* /dev/ttyACM* /dev/ttyS* /dev/ttyAMA*
+	
+	# add custom
+	if [[ "$archCur" == "pager" ]] ; then
+		interfaces+=("/dev/serial/by-path/1.1_1-1.1:1.0")
+		interfaces+=("udp://172.16.52.1:9999")
+	else
+		interfaces+=("udp://10.42.0.1:9999")
+	fi
+
+	# Check if the array contains any items
+	if [ ${#interfaces[@]} -gt 0 ]; then
+		LOG "Found ${#interfaces[@]} Possible GPS Device(s):"
+		local iface_count_count_arr=$(( ${#interfaces[@]} - 1 ))
+		local tmpnum=0
+		local vendornm=""
+		
+		LOG magenta "================================ GPS Devices ===="
+		for interface in "${interfaces[@]}"; do
+			if [[ "$interface" == "/dev/serial/by-path/1.1_1-1.1:1.0" ]]; then
+				LOG "${tmpnum}: $interface (Pager default)"
+			elif [[ "$interface" == "udp://172.16.52.1:9999" || "$interface" == "udp://10.42.0.1:9999" ]]; then
+				LOG "${tmpnum}: $interface (NMEA Relay)"
+			else
+				LOG "${tmpnum}: $interface"
+			fi
+			tmpnum=$((tmpnum + 1))
+		done
+		LOG magenta "================================ GPS Devices ===="
+		
+		if [ ${#interfaces[@]} -gt 1 ]; then
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "Press OK to confirm selecting a New GPS Device..."
+				WAIT_FOR_BUTTON_PRESS A
+			fi
+			sleep 0.5
+			
+			resp=$(CONFIRMATION_DIALOG "Confirm selecting GPS Device?")
+			if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+				# SHOW LIST FOR SELECTION IF CONFIRMED
+				local ifacenumdef=0
+				while true; do
+					if [[ "$archCur" == "pager" ]] ; then
+						LOG "Press OK to select a GPS Device..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+					fi
+					sleep 0.5
+					ifacenum=$(NUMBER_PICKER "GPS Device # (0-${iface_count_count_arr})" $ifacenumdef)
+					case $? in $DUCKYSCRIPT_CANCELLED|$DUCKYSCRIPT_REJECTED) ifacenum=$ifacenumdef ;; esac
+					[ $ifacenum -lt 0 ] && ifacenum=0
+					[ $ifacenum -gt $iface_count_count_arr ] && ifacenum=$iface_count_count_arr
+					
+					new_iface="${interfaces[$ifacenum]}"
+					
+					resp=$(CONFIRMATION_DIALOG "Accept new GPS Device ${new_iface} ?")
+					if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+						LOG green "New GPS Device Selected!"
+						LOG magenta "================================= GPS Device ===="
+						LOG "Old GPS Device: ${cur_gpsdevice}"
+						LOG magenta "New GPS Device: ${new_iface}"
+						LOG magenta "================================= GPS Device ===="
+						gps_selport="$new_iface"
+						
+						
+						# BAUD SELECT OPTION
+						if [[ "$archCur" == "pager" ]] ; then
+							# save config
+							PAYLOAD_SET_CONFIG bluepinesuite gps_selport "$gps_selport"
+							uci set gpsd.core.device="$gps_selport"
+							uci commit gpsd
+							sleep 1
+							LOG "Press OK to confirm selecting a New Baud also..."
+							WAIT_FOR_BUTTON_PRESS A
+						fi
+						sleep 0.5
+						
+						resp=$(CONFIRMATION_DIALOG "Confirm selecting New Baud for Updated Device?")
+						if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+							silent_action=1
+							gps_baudselect
+							silent_action=0
+						fi
+						
+						if [[ "$archCur" == "pager" ]] ; then
+							/etc/init.d/gpsd reload 2>/dev/null
+							/etc/init.d/gpsd restart 2>/dev/null
+						else
+							if [[ "$gps_enabled" -eq 1 ]] ; then
+								gps_collect_stop
+								gps_collect_start
+							fi
+						fi
+						
+						LOG "Press OK to continue..."
+						LOG " "
+						WAIT_FOR_BUTTON_PRESS A
+						sleep 0.25
+						break
+					else 
+						LOG red "Skip GPS Device: ${new_iface}, selecting new..."
+					fi
+					sleep 0.5
+				done
+			else
+				LOG "Skipped selecting GPS Device..."
+				LOG " "
+			fi
+		else
+			LOG "Only 1 GPS Device Found..."
+			LOG " "
+		fi
+	else
+		LOG red "No Possible GPS Devices Found!"
+		LOG " "
+	fi
+	
+}
+
+# gps baudselect
+gps_baudselect() {
+	local cur_gpsbaud=""
+	
+	if [[ "$archCur" == "pager" ]] ; then
+		cur_gpsbaud=$(uci get gpsd.core.speed)
+	else
+		cur_gpsbaud="$gps_selbaud"
+	fi
+	
+	LOG cyan "Current GPS Baud: '${cur_gpsbaud}'"
+	
+	# Read the sorted command output directly into an array line-by-line
+	# mapfile -t interfaces < <(iw dev | grep Interface | awk '!/mon$/ {sub(/^[ \t]*Interface[ \t]*/, ""); print}' | sort)
+	
+	declare -A interfaces
+	interfaces[0]="115200"
+	interfaces[1]="76800"
+	interfaces[2]="57600"
+	interfaces[3]="38400"
+	interfaces[4]="28800"
+	interfaces[5]="19200"
+	interfaces[6]="9600"
+	interfaces[7]="4800"
+	interfaces[8]="2400"
+	interfaces[9]="1200"
+
+	local iface_count_count_arr=$(( ${#interfaces[@]} - 1 ))
+	local tmpnum=0
+	
+	LOG magenta "================================== GPS Bauds ===="
+	for interface in "${interfaces[@]}"; do
+		item_txt="${interfaces[$tmpnum]}"
+		LOG "${tmpnum}: $item_txt"
+		tmpnum=$((tmpnum + 1))
+	done
+	LOG magenta "================================== GPS Bauds ===="
+	
+	if [[ "$archCur" == "pager" ]] ; then
+		LOG "Press OK to confirm selecting a New GPS Baud..."
+		WAIT_FOR_BUTTON_PRESS A
+	fi
+	sleep 0.5
+	
+	resp=$(CONFIRMATION_DIALOG "Confirm selecting GPS Baud?")
+	if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+		# SHOW LIST FOR SELECTION IF CONFIRMED
+		local ifacenumdef=0
+		while true; do
+			if [[ "$archCur" == "pager" ]] ; then
+				LOG "Press OK to select a GPS Baud..."
+				LOG " "
+				WAIT_FOR_BUTTON_PRESS A
+			fi
+			sleep 0.5
+			ifacenum=$(NUMBER_PICKER "GPS Baud # (0-${iface_count_count_arr})" $ifacenumdef)
+			case $? in $DUCKYSCRIPT_CANCELLED|$DUCKYSCRIPT_REJECTED) ifacenum=$ifacenumdef ;; esac
+			[ $ifacenum -lt 0 ] && ifacenum=0
+			[ $ifacenum -gt $iface_count_count_arr ] && ifacenum=$iface_count_count_arr
+			
+			new_iface="${interfaces[$ifacenum]}"
+			
+			resp=$(CONFIRMATION_DIALOG "Accept new GPS Baud ${new_iface} ?")
+			if [[ "$resp" == "$DUCKYSCRIPT_USER_CONFIRMED" ]] ; then
+				LOG green "New GPS Baud Selected!"
+				LOG magenta "=================================== GPS Baud ===="
+				LOG "Old GPS Baud: ${cur_gpsbaud}"
+				LOG magenta "New GPS Baud: ${new_iface}"
+				LOG magenta "=================================== GPS Baud ===="
+				gps_selbaud="$new_iface"
+				if [[ "$archCur" == "pager" ]] ; then
+					# save config
+					PAYLOAD_SET_CONFIG bluepinesuite gps_selbaud "$gps_selbaud"
+					uci set gpsd.core.speed="$gps_selbaud"
+					uci commit gpsd
+					if [[ "$silent_action" -eq 0 ]] ; then
+						sleep 1
+						/etc/init.d/gpsd reload 2>/dev/null
+						/etc/init.d/gpsd restart 2>/dev/null
+					fi
+				else
+					if [[ "$gps_enabled" -eq 1 && "$silent_action" -eq 0 ]] ; then
+						gps_collect_stop
+						gps_collect_start
+					fi
+				fi
+				if [[ "$silent_action" -eq 0 ]] ; then
+					LOG "Press OK to continue..."
+					LOG " "
+					WAIT_FOR_BUTTON_PRESS A
+					sleep 0.25
+				fi
+				break
+			else 
+				LOG red "Skip GPS Baud: ${new_iface}, selecting new..."
+			fi
+			sleep 0.5
+		done
+	else
+		LOG "Skipped selecting GPS Baud..."
+		LOG " "
+	fi	
+}
 
 
 # working on BT speaker
