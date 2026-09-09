@@ -6,12 +6,6 @@
 
 -- Nodes currently tested running on XIAO_ESP32-C5's.
 
-
-
-
-# Node Support / Pine Needles:
--- Nodes running on XIAO_ESP32-C5's
-
 -- -- - Nodes connect to the Pager Mgmt AP for Pager, Hotspot for Debian/AArch64
 
 -- Pager Mgmt AP + Hotspot for Debian can be enabled at: "Preferences > Manage Pine Needles"
