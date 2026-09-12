@@ -1,5 +1,5 @@
 
-![BluePine Node Support](../images/BT-bluepine-nodes.jpg)
+![BluePine Nodes uConsole](../images/BT-bluepine-nodes-uconsole.jpg)
 
 
 # Node Support / Pine Needles:
@@ -16,6 +16,12 @@
 -- -- - Hotspot Interface (wlan0, wlan1, etc) can be selected at: "Preferences > Manage Pine Needles > Select Hotspot Interface"
 
 -- Node Network is setup at: "Preferences > Manage Pine Needles"
+
+
+
+![BluePine Node Support](../images/BT-bluepine-nodes.jpg)
+
+
 
 -- To configure each Node:
 
@@ -36,3 +42,8 @@
 -- -- - If credentials fail after 45 seconds, Node will reboot into AP/Configuration mode again.
 
 -- -- - When powered on Nodes try to connect for 45 seconds and if connection fails, the Node enters AP/Configuration mode 
+
+
+
+![BluePine Node Configuration](../images/BT-bluepine-node-cfg.jpg)
+
