@@ -43,6 +43,8 @@ Required files for AArch64/ARM64/Debian Support are in the "include/aarch64" fol
 
 
 # Node Support / Pine Needles
+![BluePine Nodes uConsole](images/BT-bluepine-nodes-uconsole.jpg)
+
 ![BluePine Node Support](images/BT-bluepine-nodes.jpg)
 
 Nodes provide extra support data for Bluetooth scans, widen Bluetooth coverage, reveal more devices per scan, and accurately detect AirTags and Meshtastic/MeshCore.  Nodes can be used with the pager or AArch64/ARM64/Debian and are currently tested running on XIAO_ESP32-C5's.  The latest Node Firmware can be found [here](https://github.com/cncartistsec/BluePine-WiFi-Pineapple-Pager/tree/main/node-firmware/).
