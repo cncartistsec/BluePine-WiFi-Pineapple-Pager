@@ -2873,8 +2873,9 @@ gps_deviceselect() {
 	if [[ "$archCur" == "pager" ]] ; then
 		interfaces+=("/dev/serial/by-path/1.1_1-1.1:1.0")
 		interfaces+=("udp://172.16.52.1:9999")
-	else
-		interfaces+=("udp://10.42.0.1:9999")
+	# else
+		# UDP relay in testing
+		# interfaces+=("udp://10.42.0.1:9999")
 	fi
 
 	# Check if the array contains any items
