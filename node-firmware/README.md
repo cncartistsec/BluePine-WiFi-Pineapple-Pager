@@ -9,7 +9,15 @@
 
 -- Nodes currently tested running on XIAO_ESP32-C5's.
 
+-- -- - $5-7 ea., can be purchased from Seeed Studio (not affiliated) - [XIAO ESP32-C5](https://www.seeedstudio.com/Seeed-Studio-XIAO-ESP32C5-p-6609.html)
+
 -- -- - Nodes connect to the Pager Mgmt AP for Pager, Hotspot for Debian/AArch64
+
+-- -- - 3D Printed STL files are provided built for the XIAO_ESP32-C5
+
+-- -- -- - Pine_Needle_3DP_Case_main.STL = ESP32 holder
+
+-- -- -- - Pine_Needle_3DP_Case_cover.STL = Back friction fit cover available in open (for heatsink) or closed (Pine_Needle_3DP_Case_cover_closed.STL)
 
 -- Pager Mgmt AP + Hotspot for Debian can be enabled at: "Preferences > Manage Pine Needles"
 
