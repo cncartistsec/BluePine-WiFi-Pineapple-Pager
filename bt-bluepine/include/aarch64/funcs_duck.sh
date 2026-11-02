@@ -1,7 +1,7 @@
 #!/bin/bash
 # Duckyscript Switch Functions for BluePine with supporting GPS Functions
 # Author: cncartist
-# Version: 1.6
+# Version: 2.0
 # 
 # check_rfkill
 # check_pygnss
