@@ -54,9 +54,9 @@ Nodes provide extra support data for Bluetooth scans, widen Bluetooth coverage, 
 
 # Title: BluePine
 # Author: cncartist
-# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
+# Description: Bluepine - Bluetooth Device Detection & Hunting Suite. Detection Scanner, Jammer Locator, Target Probing, Last Target and Saved Targets List Management, Save / Load Saved Target List from File, Configuration Saving, GPS, Node Support, Debugging, Privacy, Stealth, and more.  Full functionality tested on Pagers internal Bluetooth & USB CSR8510 / CSR v4.0 Bluetooth Adapter.  Without a USB CSR v4.0 Bluetooth Adapter there will be a slightly limited experience due to less signal/range, no jammer location capabilities, and inability to change the built in MAC.
 # Category: reconnaissance
-# Version: 1.6
+# Version: 2.0
 # 
 # ============================================
 # Acknowledgements: 
@@ -270,6 +270,7 @@ Nodes provide extra support data for Bluetooth scans, widen Bluetooth coverage, 
 # ============================================
 #            Version History
 # ============================================
+# v2.0 -- Pager FW 2.0 Compatibility & Fixes
 # v1.6 -- GPS Management, Node Support, AirTag Detection, Fixes
 # v1.5 -- Add Nest, Smart Glasses, & Tile Detection
 # v1.4 -- AArch64/ARM64/Debian Support
@@ -282,5 +283,6 @@ Nodes provide extra support data for Bluetooth scans, widen Bluetooth coverage, 
 # ============================================
 # change actual sound setting for pager alerts?
 # implement sql lite db instead of current method?
+# check if node loses connection, warn if so for which one
 # ============================================
 # 
